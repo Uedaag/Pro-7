@@ -3,33 +3,24 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { useData } from '../contexts/DataContext';
 import { 
-  User as UserIcon, Mail, Phone, BookOpen, Award, Briefcase, 
+  User as UserIcon, Mail, Phone, Award, Briefcase, 
   Moon, Sun, Camera, Save, CheckCircle, Plus, Trash2
 } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
-  const { users, updateUser } = useData();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { currentUser, updateUser } = useData();
   
-  // Form States
   const [formData, setFormData] = useState<Partial<User>>({});
   const [newEducation, setNewEducation] = useState('');
   const [newExpertise, setNewExpertise] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('eduEscapeUser');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      // Sync with latest data from context
-      const contextUser = users.find(u => u.id === user.id) || user;
-      setCurrentUser(contextUser);
-      setFormData(contextUser);
+    if (currentUser) {
+      setFormData(currentUser);
     }
-  }, [users]);
+  }, [currentUser]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -71,56 +62,24 @@ export const ProfileView: React.FC = () => {
 
   const handleThemeChange = (theme: 'light' | 'dark') => {
     setFormData({ ...formData, themePreference: theme });
-    // Apply immediately
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!currentUser) return;
 
-    // Validation
-    if (password && password !== confirmPassword) {
-      setMessage({ type: 'error', text: 'As senhas não coincidem.' });
-      return;
+    try {
+        const updatedUser: User = { ...currentUser, ...formData };
+        await updateUser(updatedUser);
+        setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
+        setTimeout(() => setMessage(null), 3000);
+    } catch (e) {
+        setMessage({ type: 'error', text: 'Erro ao atualizar.' });
     }
-
-    // Email check (simplified - in real app check backend)
-    if (formData.email !== currentUser.email) {
-      const emailExists = users.some(u => u.email === formData.email && u.id !== currentUser.id);
-      if (emailExists) {
-        setMessage({ type: 'error', text: 'Este email já está em uso.' });
-        return;
-      }
-    }
-
-    // Save
-    const updatedUser: User = {
-      ...currentUser,
-      ...formData,
-      // In a real app, password would be handled separately and securely
-    };
-
-    updateUser(updatedUser);
-    localStorage.setItem('eduEscapeUser', JSON.stringify(updatedUser));
-    
-    // Simulate password update
-    if (password) {
-      const db = JSON.parse(localStorage.getItem('pro7_auth_db') || '{}');
-      if (formData.email) {
-         delete db[currentUser.email]; // Remove old email key if changed
-         db[formData.email] = password;
-         localStorage.setItem('pro7_auth_db', JSON.stringify(db));
-      }
-    }
-
-    setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
-    setTimeout(() => setMessage(null), 3000);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +108,6 @@ export const ProfileView: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        {/* Left Column: Avatar & Theme */}
         <div className="space-y-6">
           <div className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm text-center">
             <div className="relative w-32 h-32 mx-auto mb-4">
@@ -192,7 +150,6 @@ export const ProfileView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Form Data */}
         <div className="md:col-span-2 space-y-6">
           <div className="bg-white dark:bg-[#0f172a] p-8 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm space-y-6">
             
@@ -225,15 +182,15 @@ export const ProfileView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Email (Login)</label>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 text-slate-400" size={18}/>
                 <input 
                   name="email"
                   type="email"
                   value={formData.email || ''}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                  disabled
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 cursor-not-allowed"
                 />
               </div>
             </div>
@@ -249,32 +206,9 @@ export const ProfileView: React.FC = () => {
                 placeholder="Escreva um pouco sobre você..."
               />
             </div>
-
-            <div className="border-t border-slate-100 dark:border-white/5 pt-6">
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Alterar Senha</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <input 
-                  type="password"
-                  placeholder="Nova Senha"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
-                />
-                <input 
-                  type="password"
-                  placeholder="Confirmar Nova Senha"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
-                />
-              </div>
-            </div>
-
           </div>
 
-          {/* Education & Expertise */}
           <div className="bg-white dark:bg-[#0f172a] p-8 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm space-y-6">
-            
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center gap-2">
                 <Award size={16}/> Formação Acadêmica
@@ -320,7 +254,6 @@ export const ProfileView: React.FC = () => {
                 <button onClick={handleAddExpertise} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100"><Plus size={20}/></button>
               </div>
             </div>
-
           </div>
 
           <div className="flex justify-end">
@@ -331,7 +264,6 @@ export const ProfileView: React.FC = () => {
               <Save size={20} /> Salvar Alterações
             </button>
           </div>
-
         </div>
       </div>
     </div>

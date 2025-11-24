@@ -12,66 +12,41 @@ import { AdminView } from './components/AdminView';
 import { CommunityView } from './components/CommunityView';
 import { VideosView } from './components/PlaceholderViews';
 import { ProfileView } from './components/ProfileView';
+import { AIChatAssistant } from './components/AIChatAssistant';
 import { User, View } from './types';
-import { DataProvider } from './contexts/DataContext';
-import { Crown, Lock, ShieldCheck } from 'lucide-react';
+import { DataProvider, useData } from './contexts/DataContext';
+import { Crown, Lock, ShieldCheck, Loader2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const { currentUser, loading, signOut } = useData();
   
   // Layout State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // --- Initialization & Auth Logic ---
+  // Sync Theme
   useEffect(() => {
-    // Check Auth
-    const savedUser = localStorage.getItem('eduEscapeUser');
-    if (savedUser) {
-      try {
-        const u = JSON.parse(savedUser);
-        // Garantir campos novos se for login antigo
-        if (!u.plan) u.plan = 'free';
-        if (!u.role) u.role = 'teacher';
-        if (!u.status) u.status = 'approved';
-        setUser(u);
-      } catch (e) {
-        localStorage.removeItem('eduEscapeUser');
-      }
+    if (currentUser?.themePreference === 'dark') {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setIsDarkMode(false);
+      document.documentElement.classList.remove('dark');
     }
-    
-    setIsDarkMode(false);
-    document.documentElement.classList.remove('dark');
-    localStorage.setItem('theme', 'light');
-
-    setIsInitializing(false);
-  }, []);
+  }, [currentUser]);
 
   const toggleTheme = () => {
     setIsDarkMode(prev => {
       const newMode = !prev;
       if (newMode) {
         document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
       } else {
         document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
       }
       return newMode;
     });
-  };
-
-  const handleLogin = (userData: User) => {
-    setUser(userData);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('eduEscapeUser');
-    setUser(null);
-    setCurrentView('dashboard'); 
+    // Opcional: salvar no DB via updateProfile no futuro
   };
 
   // --- ACCESS CONTROL (GATEKEEPER) ---
@@ -80,9 +55,9 @@ const AppContent: React.FC = () => {
   };
 
   const hasAccess = (view: View) => {
-    if (!user) return false;
-    if (view === 'admin' && user.role !== 'admin') return false;
-    if (isPremiumFeature(view) && user.plan !== 'premium') return false;
+    if (!currentUser) return false;
+    if (view === 'admin' && currentUser.role !== 'admin') return false;
+    if (isPremiumFeature(view) && currentUser.plan !== 'premium') return false;
     return true;
   };
 
@@ -114,9 +89,8 @@ const AppContent: React.FC = () => {
   );
 
   const renderView = () => {
-    if (!user) return <AuthForm onLogin={handleLogin} />;
+    if (!currentUser) return null;
 
-    // Verificação de Acesso
     if (!hasAccess(currentView)) {
        if (currentView === 'admin') return <AdminGate />;
        return <PremiumGate />;
@@ -124,17 +98,17 @@ const AppContent: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard user={user} onNavigate={setCurrentView} />;
+        return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
       case 'games':
         return <GamesContainer />;
       case 'profile':
         return <ProfileView />;
       case 'agenda':
-        return <AgendaView user={user} />;
+        return <AgendaView user={currentUser} />;
       case 'classes':
-        return <ClassesView user={user} onNavigate={setCurrentView} />;
+        return <ClassesView user={currentUser} onNavigate={setCurrentView} />;
       case 'lesson-plans':
-        return <MetrarView user={user} />; 
+        return <MetrarView user={currentUser} />; 
       case 'videos':
         return <VideosView />;
       case 'activity-generator':
@@ -144,16 +118,20 @@ const AppContent: React.FC = () => {
       case 'community':
         return <CommunityView />;
       default:
-        return <Dashboard user={user} onNavigate={setCurrentView} />;
+        return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
     }
   };
 
-  if (isInitializing) {
-    return <div className="min-h-screen bg-slate-50 transition-colors"></div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="animate-spin text-cyan-600" size={40} />
+      </div>
+    );
   }
 
-  if (!user) {
-    return <AuthForm onLogin={handleLogin} />;
+  if (!currentUser) {
+    return <AuthForm />;
   }
 
   return (
@@ -165,8 +143,8 @@ const AppContent: React.FC = () => {
         setCurrentView={setCurrentView}
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
-        user={user}
-        onLogout={handleLogout}
+        user={currentUser}
+        onLogout={signOut}
       />
       
       <main 
@@ -176,13 +154,13 @@ const AppContent: React.FC = () => {
           p-8 min-h-screen relative
         `}
       >
-        {/* Background Texture */}
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-50 pointer-events-none mix-blend-soft-light dark:opacity-20"></div>
-        
         <div className="relative z-10">
             {renderView()}
         </div>
       </main>
+
+      <AIChatAssistant />
     </div>
   );
 };

@@ -1,25 +1,22 @@
 
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { User, UserPlan, UserStatus } from '../types';
+import { User } from '../types';
 import { 
-  Users, ShieldCheck, TrendingUp, Search, Filter, 
-  CheckCircle, XCircle, Crown, Trash2, Ban, Lock
+  Users, ShieldCheck, TrendingUp, Search, 
+  CheckCircle, Crown, Trash2, Ban, Lock
 } from 'lucide-react';
 
 export const AdminView: React.FC = () => {
-  const { users, posts, updateUser, deleteUser, deletePost } = useData();
+  const { users, posts, updateUser, deleteUser } = useData();
   const [filter, setFilter] = useState<'all' | 'pending' | 'premium' | 'blocked'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'settings'>('dashboard');
 
-  // Stats
   const totalUsers = users.length;
   const activeUsers = users.filter(u => u.status === 'approved').length;
   const premiumUsers = users.filter(u => u.plan === 'premium').length;
-  const pendingUsers = users.filter(u => u.status === 'pending').length;
 
-  // Filtered Users
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           u.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -27,28 +24,26 @@ export const AdminView: React.FC = () => {
       ? true 
       : filter === 'premium' 
         ? u.plan === 'premium'
-        : u.status === filter; // pending or blocked
+        : u.status === filter;
     
     return matchesSearch && matchesFilter;
   });
 
-  const handleApprove = (user: User) => {
-    updateUser({ ...user, status: 'approved' });
+  const handleApprove = async (user: User) => {
+    await updateUser({ ...user, status: 'approved' });
   };
 
-  const handleBlock = (user: User) => {
-    updateUser({ ...user, status: 'blocked' });
+  const handleBlock = async (user: User) => {
+    await updateUser({ ...user, status: 'blocked' });
   };
 
-  const handleTogglePremium = (user: User) => {
+  const handleTogglePremium = async (user: User) => {
     const newPlan = user.plan === 'premium' ? 'free' : 'premium';
-    updateUser({ ...user, plan: newPlan });
+    await updateUser({ ...user, plan: newPlan });
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-20">
-      
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 text-white p-8 rounded-2xl shadow-xl">
         <div>
           <h1 className="text-3xl font-black flex items-center gap-3">
@@ -58,24 +53,9 @@ export const AdminView: React.FC = () => {
           <p className="text-slate-400 mt-1 font-mono text-sm">Controle de Acesso e Moderação Global</p>
         </div>
         <div className="flex bg-slate-800 rounded-lg p-1">
-          <button 
-            onClick={() => setActiveTab('dashboard')}
-            className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-          >
-            Dashboard
-          </button>
-          <button 
-             onClick={() => setActiveTab('users')}
-             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-          >
-            Professores
-          </button>
-          <button 
-             onClick={() => setActiveTab('settings')}
-             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'settings' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-          >
-            Configurações
-          </button>
+          <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Dashboard</button>
+          <button onClick={() => setActiveTab('users')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Professores</button>
+          <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'settings' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Configurações</button>
         </div>
       </div>
 
@@ -118,7 +98,6 @@ export const AdminView: React.FC = () => {
 
       {activeTab === 'users' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-slide-in-from-bottom-4">
-           {/* Filters */}
            <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center bg-slate-50">
               <div className="relative w-full md:w-96">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -143,7 +122,6 @@ export const AdminView: React.FC = () => {
               </div>
            </div>
 
-           {/* Table */}
            <div className="overflow-x-auto">
              <table className="w-full text-left">
                <thead className="bg-slate-100 text-slate-500 text-xs uppercase font-bold">
@@ -195,11 +173,7 @@ export const AdminView: React.FC = () => {
                           </button>
                        )}
                        
-                       <button 
-                         onClick={() => handleTogglePremium(u)} 
-                         className={`p-2 rounded transition-colors ${u.plan === 'premium' ? 'bg-amber-100 text-amber-600 hover:bg-slate-100 hover:text-slate-400' : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-600'}`}
-                         title={u.plan === 'premium' ? "Remover Premium" : "Dar Premium"}
-                       >
+                       <button onClick={() => handleTogglePremium(u)} className={`p-2 rounded transition-colors ${u.plan === 'premium' ? 'bg-amber-100 text-amber-600 hover:bg-slate-100 hover:text-slate-400' : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-600'}`}>
                          <Crown size={16} />
                        </button>
 
@@ -211,38 +185,12 @@ export const AdminView: React.FC = () => {
                  ))}
                </tbody>
              </table>
-             {filteredUsers.length === 0 && (
-               <div className="p-12 text-center text-slate-400">Nenhum usuário encontrado com os filtros atuais.</div>
-             )}
            </div>
         </div>
       )}
-
       {activeTab === 'settings' && (
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-slide-in-from-bottom-4">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-               <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Lock size={20} className="text-slate-400"/> Acesso Gratuito (Free)</h3>
-               <ul className="space-y-3">
-                  {['Dashboard', 'Agenda / Calendário', 'Turmas (Gestão Básica)', 'Comunidade (Leitura/Post)', '3 Gerações de IA / mês'].map((item, i) => (
-                    <li key={i} className="flex items-center gap-3 text-sm text-slate-600">
-                       <CheckCircle size={16} className="text-emerald-500" /> {item}
-                    </li>
-                  ))}
-               </ul>
-            </div>
-             <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-6 rounded-2xl border border-amber-200 shadow-sm">
-               <h3 className="font-bold text-amber-800 mb-4 flex items-center gap-2"><Crown size={20} className="text-amber-600"/> Acesso Premium</h3>
-               <ul className="space-y-3">
-                  {['Gerador IA Ilimitado', 'Jogos Educativos (Edu Escape)', 'Biblioteca de Modelos', 'Edição Avançada de Slides', 'Downloads Ilimitados (PPTX, PDF)'].map((item, i) => (
-                    <li key={i} className="flex items-center gap-3 text-sm text-amber-900">
-                       <CheckCircle size={16} className="text-amber-600" /> {item}
-                    </li>
-                  ))}
-               </ul>
-            </div>
-         </div>
+        <div>Configurações Gerais (Em breve)</div>
       )}
-
     </div>
   );
 };

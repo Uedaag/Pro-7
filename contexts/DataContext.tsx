@@ -1,262 +1,527 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CalendarEvent, DataContextType, BimesterPlan, ClassRoom, User, Post } from '../types';
+import { CalendarEvent, DataContextType, BimesterPlan, ClassRoom, User, Post, GeneratedActivity } from '../types';
+import { supabase } from '../lib/supabaseClient';
 
-// Função auxiliar para criar datas relativas a hoje (para demo)
-const createDate = (hour: number, minute: number) => {
-  const d = new Date();
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
-};
+interface ExtendedDataContextType extends DataContextType {
+  addActivity: (activity: GeneratedActivity) => Promise<void>;
+}
 
-// Estado inicial simulado DINÂMICO
-const INITIAL_EVENTS: CalendarEvent[] = [
-  {
-    id: '1',
-    userId: 'teacher-1', // Vinculado ao usuário de exemplo
-    title: 'Conselho de Classe (9º Anos)',
-    type: 'reuniao',
-    start: createDate(13, 30),
-    end: createDate(15, 0),
-    description: 'Definição de notas e recuperação bimestral.',
-    className: 'Sala dos Professores'
-  },
-  {
-    id: '2',
-    userId: 'teacher-1',
-    title: 'Entrega de Diários',
-    type: 'atividade',
-    start: createDate(18, 0),
-    end: createDate(19, 0),
-    description: 'Prazo final para submissão no sistema.',
-  },
-  {
-    id: '3',
-    userId: 'teacher-1',
-    title: 'História: Era Vargas',
-    type: 'aula',
-    start: createDate(7, 30),
-    end: createDate(8, 20),
-    className: '9º Ano A',
-    classId: 'class-1',
-    description: 'Introdução ao Estado Novo e análise da CLT.',
-  }
-];
-
-// Turmas Iniciais Mockadas
-const INITIAL_CLASSES: ClassRoom[] = [
-  {
-    id: 'class-1',
-    userId: 'teacher-1', // Vinculado ao usuário de exemplo
-    name: '9º Ano A',
-    grade: '9º Ano',
-    subject: 'História',
-    shift: 'Matutino',
-    studentsCount: 32,
-    linkedPlanIds: [],
-    generatedActivities: []
-  },
-  {
-    id: 'class-2',
-    userId: 'teacher-1',
-    name: '8º Ano B',
-    grade: '8º Ano',
-    subject: 'Geografia',
-    shift: 'Vespertino',
-    studentsCount: 28,
-    linkedPlanIds: [],
-    generatedActivities: []
-  }
-];
-
-// Usuários Mockados (Para testar Admin)
-const INITIAL_USERS: User[] = [
-  {
-    id: 'admin-1',
-    name: 'Diretor Pro 7',
-    email: 'admin@pro7.com',
-    role: 'admin',
-    plan: 'premium',
-    status: 'approved',
-    joinedAt: '2023-01-01T10:00:00Z',
-    school: 'Sede'
-  },
-  {
-    id: 'teacher-1',
-    name: 'Prof. Marcos Premium',
-    email: 'marcos@escola.com',
-    role: 'teacher',
-    plan: 'premium',
-    status: 'approved',
-    joinedAt: '2024-02-15T14:30:00Z',
-    school: 'Colégio Estadual'
-  },
-  {
-    id: 'teacher-2',
-    name: 'Prof. Ana Free',
-    email: 'ana@escola.com',
-    role: 'teacher',
-    plan: 'free',
-    status: 'approved',
-    joinedAt: '2024-03-10T09:00:00Z',
-    school: 'Escola Municipal'
-  },
-  {
-    id: 'teacher-3',
-    name: 'Prof. Carlos Pendente',
-    email: 'carlos@novo.com',
-    role: 'teacher',
-    plan: 'free',
-    status: 'pending',
-    joinedAt: '2024-05-20T11:00:00Z',
-    school: 'Particular'
-  }
-];
-
-const INITIAL_POSTS: Post[] = [
-  {
-    id: 'post-1',
-    userId: 'teacher-1',
-    userName: 'Prof. Marcos Premium',
-    content: 'Alguém já testou o gerador de Escape Room com o tema de Egito Antigo? Os alunos adoraram!',
-    likes: 12,
-    createdAt: new Date().toISOString()
-  }
-];
-
-const DataContext = createContext<DataContextType | undefined>(undefined);
+const DataContext = createContext<ExtendedDataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // --- EVENTS STATE ---
-  const [events, setEvents] = useState<CalendarEvent[]>(() => {
-    const saved = localStorage.getItem('pro7_events');
-    return saved ? JSON.parse(saved) : INITIAL_EVENTS;
-  });
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [plans, setPlans] = useState<BimesterPlan[]>([]);
+  const [classes, setClasses] = useState<ClassRoom[]>([]);
+  const [users, setUsers] = useState<User[]>([]); // Para admin
+  const [posts, setPosts] = useState<Post[]>([]);
 
+  // --- AUTH LISTENER & DATA FETCHING ---
   useEffect(() => {
-    localStorage.setItem('pro7_events', JSON.stringify(events));
-  }, [events]);
-
-  const addEvent = (newEventData: Omit<CalendarEvent, 'id'>) => {
-    const newEvent: CalendarEvent = {
-      ...newEventData,
-      id: crypto.randomUUID(),
+    const initData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        await fetchUserProfile(session.user.id);
+        await fetchAllData(session.user.id);
+      } else {
+        setLoading(false);
+      }
     };
-    setEvents(prev => [...prev, newEvent]);
-  };
 
-  const updateEvent = (updatedEvent: CalendarEvent) => {
-    setEvents(prev => prev.map(evt => evt.id === updatedEvent.id ? updatedEvent : evt));
-  };
+    initData();
 
-  const deleteEvent = (id: string) => {
-    setEvents(prev => prev.filter(evt => evt.id !== id));
-  };
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        if (session.user.id !== currentUser?.id) {
+           await fetchUserProfile(session.user.id);
+           await fetchAllData(session.user.id);
+        }
+      } else {
+        setCurrentUser(null);
+        setEvents([]);
+        setPlans([]);
+        setClasses([]);
+        setLoading(false);
+      }
+    });
 
-  // --- PLANS STATE (METRAR) ---
-  const [plans, setPlans] = useState<BimesterPlan[]>(() => {
-    const savedPlans = localStorage.getItem('pro7_metrar_plans');
-    return savedPlans ? JSON.parse(savedPlans) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('pro7_metrar_plans', JSON.stringify(plans));
-  }, [plans]);
-
-  const addPlan = (plan: BimesterPlan) => {
-    setPlans(prev => [plan, ...prev]);
-  };
-
-  const updatePlan = (updatedPlan: BimesterPlan) => {
-    setPlans(prev => prev.map(p => p.id === updatedPlan.id ? updatedPlan : p));
-  };
-
-  const deletePlan = (id: string) => {
-    setPlans(prev => prev.filter(p => p.id !== id));
-  };
-
-  // --- CLASSES STATE (TURMAS) ---
-  const [classes, setClasses] = useState<ClassRoom[]>(() => {
-    const savedClasses = localStorage.getItem('pro7_classes');
-    return savedClasses ? JSON.parse(savedClasses) : INITIAL_CLASSES;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('pro7_classes', JSON.stringify(classes));
-  }, [classes]);
-
-  const addClass = (classRoom: ClassRoom) => {
-    setClasses(prev => [...prev, classRoom]);
-  };
-
-  const updateClass = (updatedClass: ClassRoom) => {
-    setClasses(prev => prev.map(c => c.id === updatedClass.id ? updatedClass : c));
-  };
-
-  const deleteClass = (id: string) => {
-    setClasses(prev => prev.filter(c => c.id !== id));
-  };
-
-  // --- USERS STATE (ADMIN) ---
-  const [users, setUsers] = useState<User[]>(() => {
-    const savedUsers = localStorage.getItem('pro7_users');
-    return savedUsers ? JSON.parse(savedUsers) : INITIAL_USERS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('pro7_users', JSON.stringify(users));
-  }, [users]);
-
-  const addUser = (user: User) => {
-    setUsers(prev => [...prev, user]);
-  };
-
-  const updateUser = (updatedUser: User) => {
-    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-  };
-
-  const deleteUser = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
-  };
-
-  // --- COMMUNITY STATE ---
-  const [posts, setPosts] = useState<Post[]>(() => {
-    const savedPosts = localStorage.getItem('pro7_posts');
-    return savedPosts ? JSON.parse(savedPosts) : INITIAL_POSTS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('pro7_posts', JSON.stringify(posts));
-  }, [posts]);
-
-  const addPost = (content: string, user: User) => {
-    const newPost: Post = {
-      id: crypto.randomUUID(),
-      userId: user.id,
-      userName: user.name,
-      content,
-      likes: 0,
-      createdAt: new Date().toISOString()
+    return () => {
+      authListener.subscription.unsubscribe();
     };
-    setPosts(prev => [newPost, ...prev]);
+  }, []);
+
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (data) {
+        setCurrentUser({
+           id: data.id,
+           name: data.name,
+           email: data.email,
+           role: data.role,
+           plan: data.plan,
+           status: data.status,
+           joinedAt: data.joined_at,
+           themePreference: data.theme_preference,
+           avatarUrl: data.avatar_url,
+           phone: data.phone,
+           bio: data.bio,
+           education: data.education,
+           expertise: data.expertise
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao buscar perfil:", error);
+    }
   };
 
-  const deletePost = (id: string) => {
-    setPosts(prev => prev.filter(p => p.id !== id));
+  const fetchAllData = async (userId: string) => {
+    setLoading(true);
+    try {
+      // 1. Events
+      const { data: eventsData } = await supabase.from('events').select('*').eq('user_id', userId);
+      if (eventsData) {
+        setEvents(eventsData.map(e => ({
+          id: e.id,
+          userId: e.user_id,
+          title: e.title,
+          type: e.type,
+          start: e.start,
+          end: e.end,
+          description: e.description,
+          classId: e.class_id,
+          className: e.class_name
+        })));
+      }
+
+      // 2. Plans
+      const { data: plansData } = await supabase.from('plans').select('*').eq('user_id', userId);
+      if (plansData) {
+         setPlans(plansData.map(p => ({
+            id: p.id,
+            userId: p.user_id,
+            className: p.class_name,
+            subject: p.subject,
+            bimester: p.bimester,
+            totalLessons: p.total_lessons,
+            theme: p.theme,
+            bnccFocus: p.bncc_focus,
+            lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons,
+            createdAt: p.created_at
+         })));
+      }
+
+      // 3. Classes (Join with Activities)
+      const { data: classesData } = await supabase
+        .from('classes')
+        .select(`*, activities(*)`)
+        .eq('user_id', userId);
+      
+      if (classesData) {
+        setClasses(classesData.map(c => ({
+            id: c.id,
+            userId: c.user_id,
+            name: c.name,
+            grade: c.grade,
+            subject: c.subject,
+            shift: c.shift,
+            studentsCount: c.students_count,
+            linkedPlanIds: c.linked_plan_ids || [],
+            generatedActivities: c.activities?.map((a: any) => ({
+                id: a.id,
+                classId: a.class_id,
+                type: a.type,
+                title: a.title,
+                content: typeof a.content === 'string' ? JSON.parse(a.content) : a.content,
+                createdAt: a.created_at,
+                relatedLessonIds: a.related_lesson_ids || []
+            })) || []
+        })));
+      }
+
+      // 4. Community Posts (Public)
+      const { data: postsData } = await supabase.from('community').select('*').order('created_at', { ascending: false });
+      if (postsData) {
+        setPosts(postsData.map(p => ({
+           id: p.id,
+           userId: p.user_id,
+           userName: p.user_name,
+           content: p.content,
+           likes: p.likes,
+           createdAt: p.created_at,
+           isPinned: p.is_pinned
+        })));
+      }
+
+      // 5. Admin check to fetch all users
+      // Check current user role from the fetched profile data or local state
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
+      
+      if (profile?.role === 'admin') {
+         const { data: allProfiles } = await supabase.from('profiles').select('*');
+         if (allProfiles) {
+             setUsers(allProfiles.map(u => ({
+                 id: u.id,
+                 name: u.name,
+                 email: u.email,
+                 role: u.role,
+                 plan: u.plan,
+                 status: u.status,
+                 joinedAt: u.joined_at,
+                 themePreference: u.theme_preference,
+                 avatarUrl: u.avatar_url,
+                 phone: u.phone,
+                 bio: u.bio,
+                 education: u.education,
+                 expertise: u.expertise
+             })));
+         }
+      }
+
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const likePost = (id: string) => {
-    setPosts(prev => prev.map(p => p.id === id ? { ...p, likes: p.likes + 1 } : p));
+  // --- AUTH ACTIONS ---
+
+  const signIn = async (email: string, pass: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    return { error };
   };
 
+  const signUp = async (email: string, pass: string, name: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: pass,
+      options: {
+        data: { name }
+      }
+    });
+    return { error };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  // --- EVENTS ---
+
+  const addEvent = async (event: Omit<CalendarEvent, 'id'>) => {
+    if (!currentUser) return;
+    const { data, error } = await supabase.from('events').insert([{
+        user_id: currentUser.id,
+        title: event.title,
+        type: event.type,
+        start: event.start,
+        end: event.end,
+        description: event.description,
+        class_name: event.className
+    }]).select().single();
+
+    if (data) {
+        setEvents(prev => [...prev, {
+            id: data.id,
+            userId: data.user_id,
+            title: data.title,
+            type: data.type,
+            start: data.start,
+            end: data.end,
+            description: data.description,
+            className: data.class_name
+        }]);
+    }
+  };
+
+  const addEvents = async (newEvents: Omit<CalendarEvent, 'id'>[]) => {
+    if (!currentUser) return;
+    const dbEvents = newEvents.map(e => ({
+        user_id: currentUser.id,
+        title: e.title,
+        type: e.type,
+        start: e.start,
+        end: e.end,
+        description: e.description,
+        class_name: e.className
+    }));
+
+    const { data, error } = await supabase.from('events').insert(dbEvents).select();
+
+    if (data) {
+        const mappedEvents = data.map(d => ({
+            id: d.id,
+            userId: d.user_id,
+            title: d.title,
+            type: d.type,
+            start: d.start,
+            end: d.end,
+            description: d.description,
+            className: d.class_name
+        }));
+        setEvents(prev => [...prev, ...mappedEvents]);
+    }
+  };
+
+  const updateEvent = async (event: CalendarEvent) => {
+    const { error } = await supabase.from('events').update({
+        title: event.title,
+        type: event.type,
+        start: event.start,
+        end: event.end,
+        description: event.description,
+        class_name: event.className
+    }).eq('id', event.id);
+
+    if (!error) {
+        setEvents(prev => prev.map(e => e.id === event.id ? event : e));
+    }
+  };
+
+  const deleteEvent = async (id: string) => {
+    const { error } = await supabase.from('events').delete().eq('id', id);
+    if (!error) {
+        setEvents(prev => prev.filter(e => e.id !== id));
+    }
+  };
+
+  // --- PLANS ---
+
+  const addPlan = async (plan: BimesterPlan) => {
+    if (!currentUser) return;
+    const { data, error } = await supabase.from('plans').insert([{
+        user_id: currentUser.id,
+        class_name: plan.className,
+        subject: plan.subject,
+        bimester: plan.bimester,
+        total_lessons: plan.totalLessons,
+        theme: plan.theme,
+        bncc_focus: plan.bnccFocus,
+        lessons: JSON.stringify(plan.lessons)
+    }]).select().single();
+
+    if (data) {
+        setPlans(prev => [...prev, { ...plan, id: data.id, userId: currentUser.id, createdAt: data.created_at }]);
+    }
+  };
+
+  const updatePlan = async (plan: BimesterPlan) => {
+    const { error } = await supabase.from('plans').update({
+        class_name: plan.className,
+        subject: plan.subject,
+        bimester: plan.bimester,
+        total_lessons: plan.totalLessons,
+        theme: plan.theme,
+        bncc_focus: plan.bnccFocus,
+        lessons: JSON.stringify(plan.lessons)
+    }).eq('id', plan.id);
+
+    if (!error) {
+        setPlans(prev => prev.map(p => p.id === plan.id ? plan : p));
+    }
+  };
+
+  const deletePlan = async (id: string) => {
+    const { error } = await supabase.from('plans').delete().eq('id', id);
+    if (!error) {
+        setPlans(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  // --- CLASSES ---
+
+  const addClass = async (classRoom: ClassRoom) => {
+    if (!currentUser) return;
+    const { data, error } = await supabase.from('classes').insert([{
+        user_id: currentUser.id,
+        name: classRoom.name,
+        grade: classRoom.grade,
+        subject: classRoom.subject,
+        shift: classRoom.shift,
+        students_count: classRoom.studentsCount
+    }]).select().single();
+
+    if (data) {
+        const newClass: ClassRoom = {
+            id: data.id,
+            userId: data.user_id,
+            name: data.name,
+            grade: data.grade,
+            subject: data.subject,
+            shift: data.shift,
+            studentsCount: data.students_count,
+            linkedPlanIds: [],
+            generatedActivities: []
+        };
+        setClasses(prev => [...prev, newClass]);
+    }
+  };
+
+  const updateClass = async (classRoom: ClassRoom) => {
+    // Atualiza dados básicos
+    const { error } = await supabase.from('classes').update({
+        name: classRoom.name,
+        grade: classRoom.grade,
+        subject: classRoom.subject,
+        shift: classRoom.shift,
+        students_count: classRoom.studentsCount
+    }).eq('id', classRoom.id);
+
+    // Se houver novas atividades (adicionadas localmente antes do sync), 
+    // idealmente usamos addActivity, mas aqui sincronizamos o estado local
+    if (!error) {
+        setClasses(prev => prev.map(c => c.id === classRoom.id ? classRoom : c));
+    }
+  };
+
+  const deleteClass = async (id: string) => {
+    const { error } = await supabase.from('classes').delete().eq('id', id);
+    if (!error) {
+        setClasses(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
+  // --- USERS & ADMIN ---
+
+  const updateUser = async (user: User) => {
+    // Atualiza tabela profiles
+    const { error } = await supabase.from('profiles').update({
+        name: user.name,
+        role: user.role,
+        plan: user.plan,
+        status: user.status,
+        theme_preference: user.themePreference,
+        avatar_url: user.avatarUrl,
+        phone: user.phone,
+        bio: user.bio,
+        education: user.education,
+        expertise: user.expertise
+    }).eq('id', user.id);
+
+    if (!error) {
+        if (currentUser?.id === user.id) {
+            setCurrentUser(user);
+        }
+        setUsers(prev => prev.map(u => u.id === user.id ? user : u));
+    }
+  };
+
+  const deleteUser = async (id: string) => {
+    // Deletar usuário do Auth requer Service Role, que não é seguro no client.
+    // Aqui deletamos apenas o profile (soft delete) ou bloqueamos.
+    // Para fins deste exemplo, deletamos da tabela profiles.
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (!error) {
+        setUsers(prev => prev.filter(u => u.id !== id));
+    }
+  };
+
+  // --- COMMUNITY ---
+
+  const addPost = async (content: string, user: User) => {
+    const { data, error } = await supabase.from('community').insert([{
+        user_id: user.id,
+        user_name: user.name,
+        content: content,
+        likes: 0
+    }]).select().single();
+
+    if (data) {
+        setPosts(prev => [{
+            id: data.id,
+            userId: data.user_id,
+            userName: data.user_name,
+            content: data.content,
+            likes: data.likes,
+            createdAt: data.created_at,
+            isPinned: false
+        }, ...prev]);
+    }
+  };
+
+  const deletePost = async (id: string) => {
+    const { error } = await supabase.from('community').delete().eq('id', id);
+    if (!error) {
+        setPosts(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const likePost = async (id: string) => {
+    const post = posts.find(p => p.id === id);
+    if (post) {
+        const newLikes = post.likes + 1;
+        await supabase.from('community').update({ likes: newLikes }).eq('id', id);
+        setPosts(prev => prev.map(p => p.id === id ? { ...p, likes: newLikes } : p));
+    }
+  };
+
+  // --- ACTIVITY GENERATOR ---
+
+  const addActivity = async (activity: GeneratedActivity) => {
+    const { data, error } = await supabase.from('activities').insert([{
+        class_id: activity.classId,
+        type: activity.type,
+        title: activity.title,
+        content: JSON.stringify(activity.content)
+    }]).select().single();
+
+    if (data) {
+        const newAct: GeneratedActivity = {
+            id: data.id,
+            classId: data.class_id,
+            type: data.type,
+            title: data.title,
+            content: typeof data.content === 'string' ? JSON.parse(data.content) : data.content,
+            createdAt: data.created_at
+        };
+        
+        // Atualiza a classe localmente
+        setClasses(prev => prev.map(c => {
+            if (c.id === activity.classId) {
+                return { ...c, generatedActivities: [...c.generatedActivities, newAct] };
+            }
+            return c;
+        }));
+    }
+  };
 
   return (
-    <DataContext.Provider value={{ 
-      events, addEvent, updateEvent, deleteEvent,
-      plans, addPlan, updatePlan, deletePlan,
-      classes, addClass, updateClass, deleteClass,
-      users, addUser, updateUser, deleteUser,
-      posts, addPost, deletePost, likePost
+    <DataContext.Provider value={{
+      loading,
+      currentUser,
+      signIn,
+      signUp,
+      signOut,
+      events,
+      addEvent,
+      addEvents,
+      updateEvent,
+      deleteEvent,
+      plans,
+      addPlan,
+      updatePlan,
+      deletePlan,
+      classes,
+      addClass,
+      updateClass,
+      deleteClass,
+      users,
+      updateUser,
+      deleteUser,
+      posts,
+      addPost,
+      deletePost,
+      likePost,
+      addActivity
     }}>
       {children}
     </DataContext.Provider>
@@ -266,7 +531,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useData = () => {
   const context = useContext(DataContext);
   if (context === undefined) {
-    throw new Error('useData deve ser usado dentro de um DataProvider');
+    throw new Error('useData must be used within a DataProvider');
   }
   return context;
 };

@@ -37,12 +37,11 @@ export interface User {
   status: UserStatus;
   joinedAt: string;
   school?: string;
-  // New fields
   avatarUrl?: string;
   phone?: string;
   bio?: string;
-  education?: string[]; // Array of strings for education entries
-  expertise?: string[]; // Array of strings for areas of expertise
+  education?: string[]; 
+  expertise?: string[]; 
   themePreference?: 'light' | 'dark';
 }
 
@@ -52,7 +51,7 @@ export type EventType = 'aula' | 'prova' | 'reuniao' | 'projeto' | 'atividade' |
 
 export interface CalendarEvent {
   id: string;
-  userId: string; // Added userId
+  userId: string;
   title: string;
   type: EventType;
   start: string;
@@ -143,6 +142,7 @@ export interface ActivityContent {
 
 export interface GeneratedActivity {
   id: string;
+  classId: string; // Adicionado para relação no DB
   type: ActivityType;
   title: string;
   content: ActivityContent;
@@ -152,7 +152,7 @@ export interface GeneratedActivity {
 
 export interface ClassRoom {
   id: string;
-  userId: string; // Added userId
+  userId: string;
   name: string;
   grade: string;
   subject: string;
@@ -174,30 +174,38 @@ export interface Post {
 }
 
 export interface DataContextType {
+  // Auth
+  loading: boolean;
+  currentUser: User | null;
+  signIn: (email: string, pass: string) => Promise<{ error: any }>;
+  signUp: (email: string, pass: string, name: string) => Promise<{ error: any }>;
+  signOut: () => Promise<void>;
+
+  // Data
   events: CalendarEvent[];
-  addEvent: (event: Omit<CalendarEvent, 'id'>) => void;
-  updateEvent: (event: CalendarEvent) => void;
-  deleteEvent: (id: string) => void;
+  addEvent: (event: Omit<CalendarEvent, 'id'>) => Promise<void>;
+  addEvents: (events: Omit<CalendarEvent, 'id'>[]) => Promise<void>;
+  updateEvent: (event: CalendarEvent) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   
   plans: BimesterPlan[];
-  addPlan: (plan: BimesterPlan) => void;
-  updatePlan: (plan: BimesterPlan) => void;
-  deletePlan: (id: string) => void;
+  addPlan: (plan: BimesterPlan) => Promise<void>;
+  updatePlan: (plan: BimesterPlan) => Promise<void>;
+  deletePlan: (id: string) => Promise<void>;
 
   classes: ClassRoom[];
-  addClass: (classRoom: ClassRoom) => void;
-  updateClass: (classRoom: ClassRoom) => void;
-  deleteClass: (id: string) => void;
+  addClass: (classRoom: ClassRoom) => Promise<void>;
+  updateClass: (classRoom: ClassRoom) => Promise<void>;
+  deleteClass: (id: string) => Promise<void>;
 
   // Admin & Users
   users: User[];
-  addUser: (user: User) => void;
-  updateUser: (user: User) => void;
-  deleteUser: (id: string) => void;
+  updateUser: (user: User) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
 
   // Community
   posts: Post[];
-  addPost: (content: string, user: User) => void;
-  deletePost: (id: string) => void;
-  likePost: (id: string) => void;
+  addPost: (content: string, user: User) => Promise<void>;
+  deletePost: (id: string) => Promise<void>;
+  likePost: (id: string) => Promise<void>;
 }

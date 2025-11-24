@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
 import { EscapeRoomData, LessonRow, ActivityContent, Slide, Question, PresentationThemeId, PresentationPaletteId } from "../types";
 
 // Inicialização Lazy para evitar erros de runtime se process.env não estiver definido no load da página
@@ -109,6 +109,38 @@ const activitySchema: Schema = {
   required: ["header", "coverImagePrompt"]
 };
 
+// --- FUNÇÕES DE CHAT ---
+
+export const createTeacherAssistantChat = (): Chat => {
+  const ai = getAI();
+  return ai.chats.create({
+    model: 'gemini-2.5-flash',
+    config: {
+      systemInstruction: `
+        Você é o "Especialista Pro 7", o assistente virtual da plataforma Pro 7.
+
+        SUAS REGRAS DE COMPORTAMENTO (RÍGIDAS):
+        1. SEJA BREVE E OBJETIVO: Suas respostas devem ter no máximo 2 ou 3 frases. Nada de textos longos.
+        2. SEJA INVESTIGATIVO: Você deve SEMPRE terminar sua resposta com uma PERGUNTA para entender exatamente o que o usuário quer fazer na ferramenta mencionada.
+           - Exemplo: Se perguntarem da Agenda, explique o que é em 1 frase e pergunte: "Você quer adicionar um evento ou ver seus horários?"
+        
+        3. ESCOPO DE ATUAÇÃO:
+           - "Edu Escape" (Jogos de fuga).
+           - "Gerador IA" (Provas/Atividades/Slides).
+           - "Planos de Aula" (Planejamento bimestral).
+           - "Agenda" (Organização).
+
+        4. SUPORTE TÉCNICO:
+           Se você não souber a resposta, ou se o usuário relatar erro/bug, responda APENAS:
+           "Para essa questão técnica, contate o suporte administrativo: (77) 99913-4858".
+
+        Tom de voz: Profissional, direto e prestativo.
+      `
+    }
+  });
+};
+
+// --- FUNÇÕES DE GERAÇÃO EXISTENTES ---
 
 export const generateEscapeRoom = async (topic: string, grade: string, duration: string, difficulty: string): Promise<EscapeRoomData> => {
   const modelId = "gemini-3-pro-preview";
