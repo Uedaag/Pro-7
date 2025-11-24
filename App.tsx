@@ -10,10 +10,8 @@ import { ClassesView } from './components/ClassesView';
 import { ActivityGeneratorView } from './components/ActivityGeneratorView';
 import { AdminView } from './components/AdminView';
 import { CommunityView } from './components/CommunityView';
-import { 
-  ProfileView, 
-  VideosView 
-} from './components/PlaceholderViews';
+import { VideosView } from './components/PlaceholderViews';
+import { ProfileView } from './components/ProfileView';
 import { User, View } from './types';
 import { DataProvider } from './contexts/DataContext';
 import { Crown, Lock, ShieldCheck } from 'lucide-react';

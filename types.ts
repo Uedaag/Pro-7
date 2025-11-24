@@ -37,6 +37,13 @@ export interface User {
   status: UserStatus;
   joinedAt: string;
   school?: string;
+  // New fields
+  avatarUrl?: string;
+  phone?: string;
+  bio?: string;
+  education?: string[]; // Array of strings for education entries
+  expertise?: string[]; // Array of strings for areas of expertise
+  themePreference?: 'light' | 'dark';
 }
 
 export type View = 'dashboard' | 'games' | 'profile' | 'agenda' | 'classes' | 'lesson-plans' | 'videos' | 'activity-generator' | 'admin' | 'community';

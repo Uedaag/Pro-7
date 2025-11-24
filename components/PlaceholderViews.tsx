@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Users, Video, Plus } from 'lucide-react';
 
@@ -13,14 +14,6 @@ const SectionPlaceholder: React.FC<{ title: string; description: string; icon: R
       Módulo em Desenvolvimento
     </div>
   </div>
-);
-
-export const ProfileView: React.FC = () => (
-  <SectionPlaceholder
-    title="Perfil do Professor"
-    description="Gerencie suas credenciais, especializações e preferências de sistema."
-    icon={Users}
-  />
 );
 
 export const VideosView: React.FC = () => (
