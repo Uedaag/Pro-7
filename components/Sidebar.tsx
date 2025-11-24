@@ -55,6 +55,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'videos', label: 'Vídeos', icon: Video, premium: true },
   ];
 
+  const handleLogoutClick = () => {
+    if (window.confirm("Tem certeza que deseja sair da sua conta?")) {
+      window.alert("Você saiu da sua conta.");
+      onLogout();
+    }
+  };
+
   return (
     <aside 
       className={`
@@ -64,8 +71,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         flex flex-col shadow-xl
       `}
     >
-      {/* Header / Logo */}
-      <div className="h-20 flex items-center justify-center border-b border-slate-200 dark:border-white/5 relative">
+      {/* 1. Header / Logo */}
+      <div className="h-20 flex items-center justify-center border-b border-slate-200 dark:border-white/5 relative shrink-0">
         <div className="flex items-center gap-3 overflow-hidden px-4 w-full">
            <div className="relative shrink-0">
               <div className="absolute inset-0 bg-cyan-500/20 blur-lg rounded-full"></div>
@@ -81,14 +88,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Toggle Button */}
         <button 
           onClick={toggleSidebar}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-500 dark:hover:text-cyan-400 shadow-md z-50"
+          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-500 dark:hover:text-cyan-400 shadow-md z-50 hidden md:flex"
         >
           {isOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
       </div>
 
-      {/* Menu Items */}
-      <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto">
+      {/* 2. Menu Items (Scrollable Area) */}
+      <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto scrollbar-hide">
         {menuItems.map((item) => {
           const isActive = currentView === item.id;
           const isLocked = item.premium && !isPremium;
@@ -103,19 +110,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ? 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 shadow-sm' 
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
                 }
+                ${!isOpen ? 'justify-center' : ''}
               `}
               title={!isOpen ? item.label : undefined}
             >
               <div className={`shrink-0 ${!isOpen && isActive ? 'text-cyan-600 dark:text-cyan-400' : ''}`}>
                 <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
               </div>
-              <span className={`font-medium whitespace-nowrap transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'}`}>
-                {item.label}
-              </span>
+              
+              {isOpen && (
+                <span className="font-medium whitespace-nowrap truncate">
+                  {item.label}
+                </span>
+              )}
               
               {/* Lock Icon for Free Users */}
               {isLocked && isOpen && (
-                 <Lock size={14} className="ml-auto text-slate-400" />
+                 <Lock size={14} className="ml-auto text-slate-400 shrink-0" />
               )}
 
               {isActive && isOpen && (
@@ -135,55 +146,66 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ? 'bg-slate-800 text-white shadow-lg' 
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }
+                  ${!isOpen ? 'justify-center' : ''}
                 `}
+                title="Painel Admin"
               >
                  <ShieldCheck size={22} />
-                 <span className={`font-bold whitespace-nowrap transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'}`}>
-                    Admin
-                 </span>
+                 {isOpen && <span className="font-bold whitespace-nowrap">Admin</span>}
               </button>
            </div>
         )}
       </nav>
 
-      {/* Bottom Actions */}
-      <div className="p-4 border-t border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-[#020410]">
+      {/* 3. Fixed Footer Actions */}
+      <div className="shrink-0 p-4 border-t border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-[#020410] flex flex-col gap-3">
+        
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all mb-2 ${!isOpen ? 'justify-center' : ''}`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 transition-all ${!isOpen ? 'justify-center' : ''}`}
           title="Alternar Tema"
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          {isOpen && <span>{isDarkMode ? 'Modo Claro' : 'Modo Escuro'}</span>}
+          {isOpen && <span className="text-sm font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Escuro'}</span>}
         </button>
 
-        {/* User Profile / Logout */}
-        <div className={`flex items-center gap-3 px-3 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 ${!isOpen ? 'justify-center' : ''}`}>
-          <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center shrink-0 text-cyan-700 dark:text-cyan-400 font-bold text-xs">
+        {/* User Profile */}
+        <div 
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 cursor-pointer hover:border-cyan-300 transition-colors ${!isOpen ? 'justify-center' : ''}`}
+          onClick={() => setCurrentView('profile')}
+          title="Meu Perfil"
+        >
+          <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center shrink-0 text-cyan-700 dark:text-cyan-400 font-bold text-xs border border-cyan-200 dark:border-cyan-800">
             {user.name.charAt(0).toUpperCase()}
           </div>
           
           {isOpen && (
-            <div className="flex-1 overflow-hidden cursor-pointer" onClick={() => setCurrentView('profile')}>
-              <p className="text-sm font-bold text-slate-700 dark:text-white truncate">{user.name}</p>
-              <div className="flex items-center gap-1">
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-bold text-slate-700 dark:text-white truncate leading-none mb-1">{user.name}</p>
+              <div className="flex items-center gap-1.5">
                  <div className={`w-2 h-2 rounded-full ${isPremium ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
-                 <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate uppercase">{user.plan}</p>
+                 <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate uppercase font-bold">{user.plan}</p>
               </div>
             </div>
           )}
-
-          {isOpen && (
-            <button 
-              onClick={onLogout}
-              className="text-slate-400 hover:text-red-500 transition-colors p-1"
-              title="Sair"
-            >
-              <LogOut size={16} />
-            </button>
-          )}
         </div>
+
+        {/* Logout Button - ALWAYS VISIBLE */}
+        <button 
+          onClick={handleLogoutClick}
+          className={`
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200
+            text-[#E53935] dark:text-[#FF6E6E] hover:bg-red-50 dark:hover:bg-red-900/20
+            border border-transparent hover:border-red-100 dark:hover:border-red-900/30
+            ${!isOpen ? 'justify-center' : ''}
+          `}
+          title="Sair da Conta"
+        >
+          <LogOut size={20} strokeWidth={2} />
+          {isOpen && <span className="font-bold text-sm">Sair</span>}
+        </button>
+
       </div>
     </aside>
   );
