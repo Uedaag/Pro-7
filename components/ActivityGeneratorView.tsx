@@ -18,7 +18,7 @@ declare global {
 }
 
 export const ActivityGeneratorView: React.FC = () => {
-  const { classes, events, plans, updateClass, addEvent } = useData();
+  const { classes, updateClass } = useData();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -39,6 +39,7 @@ export const ActivityGeneratorView: React.FC = () => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPresenting, setIsPresenting] = useState(false);
 
+  const { events, plans } = useData();
   const currentClass = classes.find(c => c.id === selectedClassId);
   
   const getClassLessons = () => {
@@ -67,7 +68,6 @@ export const ActivityGeneratorView: React.FC = () => {
 
   const handleSave = () => {
     if (!currentClass || !result) return;
-    // Salva a estrutura completa para permitir re-edição ou re-renderização futura
     const newActivity: GeneratedActivity = {
       id: crypto.randomUUID(), type: activityType, title: result.header.title,
       content: result, createdAt: new Date().toISOString(), relatedLessonIds: selectedLessons
@@ -87,13 +87,10 @@ export const ActivityGeneratorView: React.FC = () => {
       }
     } else if (format === 'pdf') {
       const isPresentation = result.structureType === 'presentation';
-      
-      // Se for apresentação, usamos um container especial oculto que tem TODOS os slides
       const elementId = isPresentation ? 'presentation-full-render-for-pdf' : 'document-render';
       const element = document.getElementById(elementId);
 
       if (element && window.html2pdf) {
-        // Para apresentações, mostramos temporariamente o container oculto se necessário
         const opt = {
           margin: isPresentation ? 0 : [10, 10, 10, 10], 
           filename: `Pro7_${result.header.title.replace(/[^a-z0-9]/gi, '_')}.pdf`,
@@ -114,7 +111,6 @@ export const ActivityGeneratorView: React.FC = () => {
     }
   };
 
-  // --- DEFINIÇÃO VISUAL DAS PALETAS PARA O PREVIEW ---
   const getPreviewStyles = () => {
     const pId = result?.paletteId || selectedPalette;
     const tId = result?.themeId || selectedTheme;
@@ -138,12 +134,10 @@ export const ActivityGeneratorView: React.FC = () => {
 
   const styles = getPreviewStyles();
 
-  // Função auxiliar para renderizar um único slide
   const renderSingleSlideContent = (slide: Slide, index: number, isPreview = false) => {
       const s = styles;
       return (
         <div className={`aspect-video relative overflow-hidden flex flex-col transition-all duration-500 ${s.bg} ${isPresenting ? 'fixed inset-0 z-[100] w-screen h-screen' : 'w-full rounded-xl shadow-2xl'} ${!isPresenting && !isPreview ? 'shadow-2xl' : ''}`}>
-             {/* Background Elements */}
              <div className="absolute inset-0 pointer-events-none overflow-hidden">
                  <div className={`absolute -top-20 -right-20 w-64 h-64 rounded-full opacity-20 ${s.accent}`}></div>
                  <div className={`absolute top-0 left-0 w-2 h-full opacity-50 ${s.accent}`}></div>
@@ -151,7 +145,6 @@ export const ActivityGeneratorView: React.FC = () => {
     
              <div className={`relative z-10 flex-1 p-12 flex flex-col ${s.font} ${s.text}`}>
                 {index === 0 ? (
-                   // CAPA
                    <div className="flex-1 flex flex-col justify-center items-center text-center animate-fade-in">
                       <div className={`w-32 h-2 mb-6 ${s.accent}`}></div>
                       <h1 contentEditable suppressContentEditableWarning className={`text-5xl font-black mb-4 ${s.primary} outline-none`}>{slide.title}</h1>
@@ -166,7 +159,6 @@ export const ActivityGeneratorView: React.FC = () => {
                       )}
                    </div>
                 ) : (
-                   // CONTEÚDO
                    <div className="flex-1 grid grid-cols-2 gap-12 items-center animate-fade-in">
                       <div>
                         <h2 contentEditable suppressContentEditableWarning className={`text-4xl font-bold mb-8 border-l-8 pl-6 outline-none ${s.primary} border-current`}>{slide.title}</h2>
@@ -193,7 +185,6 @@ export const ActivityGeneratorView: React.FC = () => {
                 )}
              </div>
     
-             {/* Controls (Hidden in PDF print) */}
              {!isPresenting && !isPreview && (
                  <div className="absolute bottom-4 left-0 w-full flex justify-between px-8 text-sm font-mono opacity-0 hover:opacity-100 transition-opacity bg-black/10 backdrop-blur-sm py-2">
                     <span>SLIDE {index + 1} / {result?.slides?.length}</span>
@@ -204,19 +195,15 @@ export const ActivityGeneratorView: React.FC = () => {
       );
   }
 
-  // --- RENDER FUNCTIONS (Defined before usage) ---
   const renderPresentation = () => {
     const slide = result?.slides?.[currentSlideIndex];
     if (!slide) return <div>Sem slides</div>;
 
     return (
         <>
-            {/* Slide Atual para Visualização */}
             <div id="presentation-render">
                 {renderSingleSlideContent(slide, currentSlideIndex)}
             </div>
-
-            {/* Container Oculto com TODOS os slides para PDF */}
             <div id="presentation-full-render-for-pdf" className="fixed top-0 left-[-9999px]">
                 {result?.slides?.map((s, idx) => (
                     <div key={idx} className="mb-4 w-[297mm] h-[210mm] overflow-hidden">
@@ -292,8 +279,52 @@ export const ActivityGeneratorView: React.FC = () => {
     </div>
   );
 
-  // --- WIZARD RENDER ---
-  const renderWizard = () => (
+  // --- RENDERIZAR RESULTADO ---
+  if (result) {
+    return (
+      <div className="min-h-screen bg-slate-100 pb-20 animate-fade-in">
+        <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-sm no-print">
+          <div className="flex items-center gap-4">
+             <button onClick={() => setResult(null)} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 font-bold text-sm">
+               <ChevronLeft size={16}/> Voltar
+             </button>
+             <div className="h-6 w-px bg-slate-200"></div>
+             <h2 className="font-bold text-slate-800">{result.header.title}</h2>
+          </div>
+          
+          <div className="flex items-center gap-2">
+             {result.structureType === 'presentation' && (
+                <div className="flex items-center gap-2 mr-4 bg-slate-100 rounded-lg p-1">
+                   <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className="p-2 hover:bg-white rounded shadow-sm"><ChevronLeft size={16}/></button>
+                   <span className="text-xs font-mono font-bold w-12 text-center">{currentSlideIndex + 1} / {result.slides?.length}</span>
+                   <button onClick={() => setCurrentSlideIndex(Math.min((result.slides?.length || 1) - 1, currentSlideIndex + 1))} className="p-2 hover:bg-white rounded shadow-sm"><ChevronRight size={16}/></button>
+                   <button onClick={() => setIsPresenting(!isPresenting)} className="p-2 hover:bg-cyan-100 text-cyan-600 rounded ml-2" title="Tela Cheia"><Maximize2 size={16}/></button>
+                </div>
+             )}
+
+             <button onClick={() => handleDownload('pdf')} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-50 rounded-lg flex items-center gap-2 text-sm">
+               <Printer size={16}/> PDF
+             </button>
+             {result.structureType === 'presentation' && (
+               <button onClick={() => handleDownload('pptx')} className="px-4 py-2 text-orange-600 font-bold hover:bg-orange-50 rounded-lg flex items-center gap-2 text-sm">
+                 <Presentation size={16}/> Baixar PPTX
+               </button>
+             )}
+             <button onClick={handleSave} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg flex items-center gap-2 text-sm shadow-lg shadow-cyan-500/20">
+               <Save size={16}/> Salvar na Turma
+             </button>
+          </div>
+        </div>
+
+        <div className="p-8 overflow-auto h-[calc(100vh-80px)] flex justify-center bg-slate-200/50 print:bg-white print:h-auto print:p-0 print:overflow-visible">
+           {result.structureType === 'presentation' ? renderPresentation() : renderDocument()}
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDERIZAR WIZARD ---
+  return (
     <div className="max-w-4xl mx-auto py-8 px-4 animate-fade-in">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-black text-slate-800 tracking-tight mb-2">Gerador de Conteúdo Profissional</h1>
@@ -439,50 +470,4 @@ export const ActivityGeneratorView: React.FC = () => {
       </div>
     </div>
   );
-
-  // Return logic moved to the end
-  if (result) {
-    return (
-      <div className="min-h-screen bg-slate-100 pb-20 animate-fade-in">
-        <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-sm no-print">
-          <div className="flex items-center gap-4">
-             <button onClick={() => setResult(null)} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 font-bold text-sm">
-               <ChevronLeft size={16}/> Voltar
-             </button>
-             <div className="h-6 w-px bg-slate-200"></div>
-             <h2 className="font-bold text-slate-800">{result.header.title}</h2>
-          </div>
-          
-          <div className="flex items-center gap-2">
-             {result.structureType === 'presentation' && (
-                <div className="flex items-center gap-2 mr-4 bg-slate-100 rounded-lg p-1">
-                   <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className="p-2 hover:bg-white rounded shadow-sm"><ChevronLeft size={16}/></button>
-                   <span className="text-xs font-mono font-bold w-12 text-center">{currentSlideIndex + 1} / {result.slides?.length}</span>
-                   <button onClick={() => setCurrentSlideIndex(Math.min((result.slides?.length || 1) - 1, currentSlideIndex + 1))} className="p-2 hover:bg-white rounded shadow-sm"><ChevronRight size={16}/></button>
-                   <button onClick={() => setIsPresenting(!isPresenting)} className="p-2 hover:bg-cyan-100 text-cyan-600 rounded ml-2" title="Tela Cheia"><Maximize2 size={16}/></button>
-                </div>
-             )}
-
-             <button onClick={() => handleDownload('pdf')} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-50 rounded-lg flex items-center gap-2 text-sm">
-               <Printer size={16}/> PDF
-             </button>
-             {result.structureType === 'presentation' && (
-               <button onClick={() => handleDownload('pptx')} className="px-4 py-2 text-orange-600 font-bold hover:bg-orange-50 rounded-lg flex items-center gap-2 text-sm">
-                 <Presentation size={16}/> Baixar PPTX
-               </button>
-             )}
-             <button onClick={handleSave} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg flex items-center gap-2 text-sm shadow-lg shadow-cyan-500/20">
-               <Save size={16}/> Salvar na Turma
-             </button>
-          </div>
-        </div>
-
-        <div className="p-8 overflow-auto h-[calc(100vh-80px)] flex justify-center bg-slate-200/50 print:bg-white print:h-auto print:p-0 print:overflow-visible">
-           {result.structureType === 'presentation' ? renderPresentation() : renderDocument()}
-        </div>
-      </div>
-    );
-  }
-
-  return renderWizard();
 };

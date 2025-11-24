@@ -67,8 +67,9 @@ const calculateFontSize = (textLength: number): number => {
 };
 
 export const generatePPTX = (content: ActivityContent): void => {
-  if (!window.PptxGenJS) {
-    alert("Erro: Biblioteca PptxGenJS não carregada.");
+  // Verificação de segurança para o objeto global
+  if (typeof window === 'undefined' || !window.PptxGenJS) {
+    alert("Erro: Biblioteca PptxGenJS não carregada. Verifique sua conexão ou recarregue a página.");
     return;
   }
 
