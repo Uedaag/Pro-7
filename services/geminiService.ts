@@ -1,8 +1,23 @@
-
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { EscapeRoomData, LessonRow, ActivityContent, Slide, Question, PresentationThemeId, PresentationPaletteId } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Inicialização Lazy para evitar erros de runtime se process.env não estiver definido no load da página
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = (): GoogleGenAI => {
+  if (!aiInstance) {
+    // Fallback seguro para evitar crash se process não existir
+    const apiKey = (typeof process !== 'undefined' && process.env && process.env.API_KEY) 
+      ? process.env.API_KEY 
+      : ''; 
+      
+    if (!apiKey) {
+      console.warn("API Key não encontrada. As chamadas de IA falharão.");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
 
 // --- SCHEMAS EXISTENTES ---
 const escapeRoomSchema: Schema = {
@@ -100,6 +115,7 @@ export const generateEscapeRoom = async (topic: string, grade: string, duration:
   const prompt = `Crie um Escape Room Educacional sobre ${topic} para ${grade}. Dificuldade: ${difficulty}. Duração: ${duration}. Saída JSON.`;
   
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: modelId,
       contents: prompt,
@@ -111,6 +127,7 @@ export const generateEscapeRoom = async (topic: string, grade: string, duration:
 
 export const generateSceneImage = async (imagePrompt: string): Promise<string> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
@@ -130,6 +147,7 @@ export const generateBimesterPlan = async (subject: string, grade: string, total
   const prompt = `Planejamento Bimestral de ${subject} para ${grade}. Tema: ${theme}. BNCC: ${bnccFocus}. ${totalLessons} aulas. JSON.`;
   
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: modelId,
       contents: prompt,
@@ -176,6 +194,7 @@ export const generateEducationalActivity = async (
   `;
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: modelId,
       contents: prompt,
