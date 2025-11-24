@@ -25,6 +25,25 @@ export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate }) => {
   const [selectedClass, setSelectedClass] = useState<ClassRoom | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  const handleCreateClass = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    
+    const newClass: ClassRoom = {
+      id: crypto.randomUUID(),
+      name: formData.get('name') as string,
+      grade: formData.get('grade') as string,
+      subject: formData.get('subject') as string,
+      shift: formData.get('shift') as string,
+      studentsCount: 0,
+      linkedPlanIds: [],
+      generatedActivities: []
+    };
+
+    addClass(newClass);
+    setIsCreateModalOpen(false);
+  };
+
   if (viewMode === 'detail' && selectedClass) {
     return (
       <ClassDetailView 
@@ -65,7 +84,60 @@ export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate }) => {
             <p className="text-sm text-slate-500 font-medium mb-4">{cls.grade} • {cls.subject}</p>
           </div>
         ))}
+        {classes.length === 0 && (
+          <div className="col-span-full py-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+            Nenhuma turma cadastrada. Clique em "Adicionar Nova Turma" para começar.
+          </div>
+        )}
       </div>
+
+      {/* Modal de Criação de Turma */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 animate-scale-in relative">
+            <button onClick={() => setIsCreateModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+              <X size={20} />
+            </button>
+            
+            <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Users size={24} className="text-purple-600"/> Nova Turma
+            </h2>
+            
+            <form onSubmit={handleCreateClass} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Nome da Turma</label>
+                <input name="name" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 font-bold" placeholder="Ex: 9º Ano A" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Série / Ano</label>
+                  <input name="grade" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-purple-500" placeholder="Ex: 9º Ano" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Turno</label>
+                  <select name="shift" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer">
+                    <option value="Matutino">Matutino</option>
+                    <option value="Vespertino">Vespertino</option>
+                    <option value="Noturno">Noturno</option>
+                    <option value="Integral">Integral</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Disciplina Principal</label>
+                <input name="subject" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-purple-500" placeholder="Ex: História" />
+              </div>
+
+              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="submit" className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow-lg shadow-purple-500/20">Criar Turma</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -244,7 +316,7 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
             )}
          </div>
 
-         <div className="absolute bottom-4 left-0 w-full flex justify-between px-8 text-sm font-mono opacity-50 bg-black/5 backdrop-blur-sm py-2">
+         <div className="absolute bottom-4 left-0 w-full flex justify-between px-8 text-sm font-mono opacity-50 bg-black/10 backdrop-blur-sm py-2">
             <span>SLIDE {currentSlideIndex + 1} / {content.slides?.length}</span>
             <span>{content.header.title}</span>
          </div>

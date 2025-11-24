@@ -1,166 +1,322 @@
 
-import React, { useState } from 'react';
-import { User, UserRole, UserPlan } from '../types';
-import { ShieldCheck, Mail, Lock, User as UserIcon, Loader2, Fingerprint, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User } from '../types';
+import { 
+  ShieldCheck, Mail, Lock, User as UserIcon, Loader2, 
+  ArrowRight, AlertCircle, CheckCircle, Eye, EyeOff, BrainCircuit 
+} from 'lucide-react';
+import { useData } from '../contexts/DataContext';
 
 interface AuthFormProps {
   onLogin: (user: User) => void;
 }
 
 export const AuthForm: React.FC<AuthFormProps> = ({ onLogin }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const { users, addUser } = useData();
+  
+  // Estado do Modo (Login vs Cadastro)
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  
+  // Estados do Formulário
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    confirmPassword: ''
   });
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Forçar modo claro ao montar
+  useEffect(() => {
+    document.documentElement.classList.remove('dark');
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError(null); // Limpar erro ao digitar
+  };
+
+  // --- SIMULAÇÃO DE BANCO DE SENHAS (LOCAL) ---
+  // Como o User type não tem senha, usamos localStorage para simular a validação de senha
+  const saveCredential = (email: string, pass: string) => {
+    const db = JSON.parse(localStorage.getItem('pro7_auth_db') || '{}');
+    db[email] = pass;
+    localStorage.setItem('pro7_auth_db', JSON.stringify(db));
+  };
+
+  const checkCredential = (email: string, pass: string) => {
+    const db = JSON.parse(localStorage.getItem('pro7_auth_db') || '{}');
+    // Para usuários mockados iniciais, aceita qualquer senha não vazia
+    if (!db[email] && (email === 'admin@pro7.com' || email.includes('@escola.com'))) return true;
+    return db[email] === pass;
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
-    // Simulação de delay de rede/API
     setTimeout(() => {
-      // Lógica simples para definir permissões baseadas no email (MOCK)
-      let role: UserRole = 'teacher';
-      let plan: UserPlan = 'free';
-      let name = isLogin ? (formData.email.split('@')[0]) : formData.name;
-
-      // Credenciais Hardcoded para Teste
-      if (formData.email === 'admin@pro7.com') {
-        role = 'admin';
-        plan = 'premium';
-        name = 'Diretor Pro 7';
-      } else if (formData.email === 'marcos@escola.com') {
-        plan = 'premium';
-        name = 'Prof. Marcos Premium';
+      // 1. Validação Básica
+      if (!formData.email || !formData.password) {
+        setError("Preencha todos os campos.");
+        setIsLoading(false);
+        return;
       }
 
-      // Criação de usuário simulado
-      const user: User = {
-        id: crypto.randomUUID(),
-        name: name,
-        email: formData.email,
-        role: role,
-        plan: plan,
-        status: 'approved',
-        joinedAt: new Date().toISOString()
-      };
+      // 2. Buscar Usuário
+      const user = users.find(u => u.email === formData.email);
 
-      // Persistir no localStorage para manter sessão
+      if (!user) {
+        setError("Email não encontrado no sistema.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Verificar Senha (Simulado)
+      if (!checkCredential(formData.email, formData.password)) {
+        setError("Senha incorreta.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 4. Verificar Status
+      if (user.status === 'blocked') {
+        setError("Conta bloqueada. Contate o administrador.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Sucesso
       localStorage.setItem('eduEscapeUser', JSON.stringify(user));
-      
       onLogin(user);
       setIsLoading(false);
     }, 1500);
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    setTimeout(() => {
+      // 1. Validação de Campos Vazios
+      if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
+        setError("Por favor, preencha todos os campos.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Validação de Senha
+      if (formData.password !== formData.confirmPassword) {
+        setError("As senhas não coincidem.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (formData.password.length < 6) {
+        setError("A senha deve ter pelo menos 6 caracteres.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Verificar se Email já existe
+      const existingUser = users.find(u => u.email === formData.email);
+      if (existingUser) {
+        setError("Este email já está cadastrado.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 4. Criar Usuário
+      const newUser: User = {
+        id: crypto.randomUUID(),
+        name: formData.name,
+        email: formData.email,
+        role: 'teacher', // Padrão
+        plan: 'free',    // Padrão Gratuito
+        status: 'approved', // Aprovado para acessar Dashboard Free imediatamente
+        joinedAt: new Date().toISOString()
+      };
+
+      // Salvar senha simulada
+      saveCredential(formData.email, formData.password);
+
+      // Salvar no Contexto
+      addUser(newUser);
+      localStorage.setItem('eduEscapeUser', JSON.stringify(newUser));
+
+      setSuccess("Conta criada com sucesso! Redirecionando...");
+      
+      // Auto Login após 1.5s
+      setTimeout(() => {
+        onLogin(newUser);
+      }, 1500);
+
+    }, 1500);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-500 bg-slate-50 dark:bg-[#020410]">
-      {/* Background decoration */}
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-soft-light"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none"></div>
-
-      <div className="w-full max-w-md bg-white/80 dark:bg-[#0f172a]/80 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-3xl p-8 shadow-xl dark:shadow-2xl relative z-10 animate-in fade-in zoom-in duration-500">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-slate-100 dark:bg-[#020410] text-cyan-600 dark:text-cyan-400 mb-6 border border-slate-200 dark:border-white/5 shadow-[0_0_30px_rgba(6,182,212,0.15)] group relative overflow-hidden">
-            <div className="absolute inset-0 bg-cyan-500/10 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-            <ShieldCheck size={40} className="relative z-10" />
+    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4 font-sans text-slate-900">
+      
+      <div className="w-full max-w-[450px] bg-white rounded-3xl shadow-2xl shadow-slate-200/50 overflow-hidden relative animate-fade-in border border-slate-100">
+        
+        {/* Header Visual */}
+        <div className="h-2 bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600"></div>
+        
+        <div className="p-8 pt-10">
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-cyan-50 rounded-2xl flex items-center justify-center text-cyan-600 mb-4 shadow-sm border border-cyan-100">
+              <BrainCircuit size={32} strokeWidth={2} />
+            </div>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+              {mode === 'login' ? 'Bem-vindo ao Pro 7' : 'Criar Nova Conta'}
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+              {mode === 'login' ? 'Faça login para acessar seu painel.' : 'Comece a usar o sistema gratuitamente.'}
+            </p>
           </div>
-          
-          <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">
-            {isLogin ? 'IDENTIFICAÇÃO' : 'NOVO AGENTE'}
-          </h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-mono tracking-widest uppercase">
-            {isLogin ? 'Acesso ao Sistema Tático' : 'Registro de Credenciais'}
-          </p>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {!isLogin && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-cyan-600 dark:text-cyan-500 uppercase tracking-widest ml-1">Nome do Agente</label>
-              <div className="relative group">
-                <UserIcon size={16} className="absolute left-4 top-4 text-slate-400 dark:text-slate-500 group-focus-within:text-cyan-500 dark:group-focus-within:text-cyan-400 transition-colors" />
-                <input
-                  type="text"
-                  required
-                  placeholder="Seu nome"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-[#020410] border border-slate-200 dark:border-white/10 rounded-xl focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 outline-none text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 transition-all shadow-inner text-sm"
-                />
-              </div>
+          {/* Mensagens de Feedback */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm font-bold rounded-xl flex items-center gap-3 animate-shake">
+              <AlertCircle size={18} /> {error}
+            </div>
+          )}
+          {success && (
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 text-sm font-bold rounded-xl flex items-center gap-3 animate-fade-in">
+              <CheckCircle size={18} /> {success}
             </div>
           )}
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-cyan-600 dark:text-cyan-500 uppercase tracking-widest ml-1">Email Institucional</label>
-            <div className="relative group">
-              <Mail size={16} className="absolute left-4 top-4 text-slate-400 dark:text-slate-500 group-focus-within:text-cyan-500 dark:group-focus-within:text-cyan-400 transition-colors" />
-              <input
-                type="email"
-                required
-                placeholder="email@escola.com"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-[#020410] border border-slate-200 dark:border-white/10 rounded-xl focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 outline-none text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 transition-all shadow-inner text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-cyan-600 dark:text-cyan-500 uppercase tracking-widest ml-1">Senha de Acesso</label>
-            <div className="relative group">
-              <Lock size={16} className="absolute left-4 top-4 text-slate-400 dark:text-slate-500 group-focus-within:text-cyan-500 dark:group-focus-within:text-cyan-400 transition-colors" />
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-[#020410] border border-slate-200 dark:border-white/10 rounded-xl focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 outline-none text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 transition-all shadow-inner text-sm"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-4 mt-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(8,145,178,0.3)] hover:shadow-[0_0_30px_rgba(8,145,178,0.5)] transform transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 border border-cyan-400/20 group"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="animate-spin" size={20} />
-                <span className="animate-pulse">Autenticando...</span>
-              </>
-            ) : (
-              <>
-                <Fingerprint size={20} className={isLogin ? "" : "hidden"} />
-                {isLogin ? 'Inicializar Sessão' : 'Registrar Credencial'}
-                {!isLogin && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />}
-              </>
+          {/* Formulário */}
+          <form onSubmit={mode === 'login' ? handleLogin : handleRegister} className="space-y-5">
+            
+            {mode === 'register' && (
+              <div className="space-y-1 animate-slide-in-from-bottom-4">
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Nome Completo</label>
+                <div className="relative">
+                  <UserIcon className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                  <input 
+                    name="name"
+                    type="text" 
+                    placeholder="Ex: João Silva"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all text-sm font-medium text-slate-800 placeholder-slate-400"
+                    value={formData.name}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="mt-8 text-center pt-6 border-t border-slate-200 dark:border-white/5">
-          <button
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setFormData({ name: '', email: '', password: '' });
-            }}
-            className="text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 text-xs uppercase tracking-wider font-bold transition-colors"
-          >
-            {isLogin ? 'Não possui credencial? Solicite Acesso' : 'Já possui conta? Acesse o Terminal'}
-          </button>
-        </div>
-        
-        {/* Dica para o usuário (Remover em produção) */}
-        <div className="mt-4 text-center text-[10px] text-slate-400 bg-slate-100 p-2 rounded">
-           <p><strong>Admin:</strong> admin@pro7.com</p>
-           <p><strong>Premium:</strong> marcos@escola.com</p>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase ml-1">E-mail</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                <input 
+                  name="email"
+                  type="email" 
+                  placeholder="seu@email.com"
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all text-sm font-medium text-slate-800 placeholder-slate-400"
+                  value={formData.email}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                <input 
+                  name="password"
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="••••••••"
+                  className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all text-sm font-medium text-slate-800 placeholder-slate-400"
+                  value={formData.password}
+                  onChange={handleChange}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {mode === 'register' && (
+              <div className="space-y-1 animate-slide-in-from-bottom-4">
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Confirmar Senha</label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                  <input 
+                    name="confirmPassword"
+                    type="password" 
+                    placeholder="••••••••"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all text-sm font-medium text-slate-800 placeholder-slate-400"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button 
+                type="submit" 
+                disabled={isLoading}
+                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-900/20 flex items-center justify-center gap-2 transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} />
+                    <span>Processando...</span>
+                  </>
+                ) : (
+                  mode === 'login' ? (
+                    <>Entrar no Sistema <ArrowRight size={18} /></>
+                  ) : (
+                    <>Criar Conta Gratuita <ArrowRight size={18} /></>
+                  )
+                )}
+              </button>
+            </div>
+
+          </form>
+
+          {/* Footer Links */}
+          <div className="mt-8 text-center space-y-4">
+            {mode === 'login' && (
+              <button className="text-xs font-bold text-slate-400 hover:text-cyan-600 transition-colors">
+                Esqueci minha senha
+              </button>
+            )}
+            
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-sm text-slate-500">
+                {mode === 'login' ? 'Ainda não tem uma conta?' : 'Já possui cadastro?'}
+              </p>
+              <button 
+                onClick={() => {
+                  setMode(mode === 'login' ? 'register' : 'login');
+                  setError(null);
+                  setSuccess(null);
+                  setFormData({ name: '', email: '', password: '', confirmPassword: '' });
+                }}
+                className="text-cyan-600 font-bold hover:text-cyan-700 mt-1"
+              >
+                {mode === 'login' ? 'Criar conta agora' : 'Fazer login'}
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

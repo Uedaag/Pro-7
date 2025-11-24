@@ -182,6 +182,7 @@ export interface DataContextType {
 
   // Admin & Users
   users: User[];
+  addUser: (user: User) => void;
   updateUser: (user: User) => void;
   deleteUser: (id: string) => void;
 

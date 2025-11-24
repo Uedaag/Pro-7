@@ -18,7 +18,7 @@ import { User, View } from './types';
 import { DataProvider } from './contexts/DataContext';
 import { Crown, Lock, ShieldCheck } from 'lucide-react';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   
@@ -67,15 +67,7 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (userData: User) => {
-    // Ao logar, definimos defaults para teste se não vierem
-    const fullUser: User = {
-       ...userData,
-       role: userData.role || 'teacher',
-       plan: userData.plan || 'free',
-       status: userData.status || 'approved',
-       joinedAt: new Date().toISOString()
-    };
-    setUser(fullUser);
+    setUser(userData);
   };
 
   const handleLogout = () => {
@@ -167,34 +159,40 @@ const App: React.FC = () => {
   }
 
   return (
-    <DataProvider>
-      <div className="min-h-screen bg-slate-50 dark:bg-[#020410] transition-colors duration-300 font-sans text-slate-900 dark:text-white">
-        <Sidebar 
-          isOpen={isSidebarOpen}
-          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          currentView={currentView}
-          setCurrentView={setCurrentView}
-          isDarkMode={isDarkMode}
-          toggleTheme={toggleTheme}
-          user={user}
-          onLogout={handleLogout}
-        />
+    <div className="min-h-screen bg-slate-50 dark:bg-[#020410] transition-colors duration-300 font-sans text-slate-900 dark:text-white">
+      <Sidebar 
+        isOpen={isSidebarOpen}
+        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        isDarkMode={isDarkMode}
+        toggleTheme={toggleTheme}
+        user={user}
+        onLogout={handleLogout}
+      />
+      
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${isSidebarOpen ? 'ml-64' : 'ml-20'}
+          p-8 min-h-screen relative
+        `}
+      >
+        {/* Background Texture */}
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-50 pointer-events-none mix-blend-soft-light dark:opacity-20"></div>
         
-        <main 
-          className={`
-            transition-all duration-300 ease-in-out
-            ${isSidebarOpen ? 'ml-64' : 'ml-20'}
-            p-8 min-h-screen relative
-          `}
-        >
-          {/* Background Texture */}
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-50 pointer-events-none mix-blend-soft-light dark:opacity-20"></div>
-          
-          <div className="relative z-10">
-             {renderView()}
-          </div>
-        </main>
-      </div>
+        <div className="relative z-10">
+            {renderView()}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <DataProvider>
+      <AppContent />
     </DataProvider>
   );
 };

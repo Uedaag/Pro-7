@@ -202,6 +202,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('pro7_users', JSON.stringify(users));
   }, [users]);
 
+  const addUser = (user: User) => {
+    setUsers(prev => [...prev, user]);
+  };
+
   const updateUser = (updatedUser: User) => {
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
   };
@@ -246,7 +250,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       events, addEvent, updateEvent, deleteEvent,
       plans, addPlan, updatePlan, deletePlan,
       classes, addClass, updateClass, deleteClass,
-      users, updateUser, deleteUser,
+      users, addUser, updateUser, deleteUser,
       posts, addPost, deletePost, likePost
     }}>
       {children}
