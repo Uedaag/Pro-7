@@ -6,7 +6,7 @@ import {
   Link, ExternalLink, X, Eye, Download, Edit3, Save, Presentation, Printer, ChevronRight, Maximize2, Image as ImageIcon
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
-import { ClassRoom, CalendarEvent, EventType, View, GeneratedActivity, ActivityContent, PresentationPaletteId, PresentationThemeId } from '../types';
+import { ClassRoom, CalendarEvent, EventType, View, GeneratedActivity, ActivityContent, PresentationPaletteId, PresentationThemeId, User } from '../types';
 import { generatePPTX } from '../services/pptService';
 
 declare global {
@@ -17,13 +17,17 @@ declare global {
 
 interface ClassesViewProps {
   onNavigate?: (view: View) => void;
+  user: User;
 }
 
-export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate }) => {
+export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate, user }) => {
   const { classes, addClass, deleteClass } = useData();
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [selectedClass, setSelectedClass] = useState<ClassRoom | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // FILTRO DE SEGURANÇA (Multi-tenancy)
+  const myClasses = classes.filter(cls => cls.userId === user.id);
 
   const handleCreateClass = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +35,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate }) => {
     
     const newClass: ClassRoom = {
       id: crypto.randomUUID(),
+      userId: user.id, // VINCULA AO USUÁRIO LOGADO
       name: formData.get('name') as string,
       grade: formData.get('grade') as string,
       subject: formData.get('subject') as string,
@@ -72,7 +77,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {classes.map(cls => (
+        {myClasses.map(cls => (
           <div key={cls.id} onClick={() => { setSelectedClass(cls); setViewMode('detail'); }} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all cursor-pointer group relative overflow-hidden">
              <div className="flex justify-between items-start mb-4">
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 group-hover:bg-purple-100 group-hover:text-purple-600 transition-colors">
@@ -84,7 +89,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({ onNavigate }) => {
             <p className="text-sm text-slate-500 font-medium mb-4">{cls.grade} • {cls.subject}</p>
           </div>
         ))}
-        {classes.length === 0 && (
+        {myClasses.length === 0 && (
           <div className="col-span-full py-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
             Nenhuma turma cadastrada. Clique em "Adicionar Nova Turma" para começar.
           </div>

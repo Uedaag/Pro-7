@@ -130,11 +130,11 @@ const AppContent: React.FC = () => {
       case 'profile':
         return <ProfileView />;
       case 'agenda':
-        return <AgendaView />;
+        return <AgendaView user={user} />;
       case 'classes':
-        return <ClassesView onNavigate={setCurrentView} />;
+        return <ClassesView user={user} onNavigate={setCurrentView} />;
       case 'lesson-plans':
-        return <MetrarView />; 
+        return <MetrarView user={user} />; 
       case 'videos':
         return <VideosView />;
       case 'activity-generator':

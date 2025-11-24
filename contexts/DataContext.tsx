@@ -13,6 +13,7 @@ const createDate = (hour: number, minute: number) => {
 const INITIAL_EVENTS: CalendarEvent[] = [
   {
     id: '1',
+    userId: 'teacher-1', // Vinculado ao usuário de exemplo
     title: 'Conselho de Classe (9º Anos)',
     type: 'reuniao',
     start: createDate(13, 30),
@@ -22,6 +23,7 @@ const INITIAL_EVENTS: CalendarEvent[] = [
   },
   {
     id: '2',
+    userId: 'teacher-1',
     title: 'Entrega de Diários',
     type: 'atividade',
     start: createDate(18, 0),
@@ -30,6 +32,7 @@ const INITIAL_EVENTS: CalendarEvent[] = [
   },
   {
     id: '3',
+    userId: 'teacher-1',
     title: 'História: Era Vargas',
     type: 'aula',
     start: createDate(7, 30),
@@ -44,6 +47,7 @@ const INITIAL_EVENTS: CalendarEvent[] = [
 const INITIAL_CLASSES: ClassRoom[] = [
   {
     id: 'class-1',
+    userId: 'teacher-1', // Vinculado ao usuário de exemplo
     name: '9º Ano A',
     grade: '9º Ano',
     subject: 'História',
@@ -54,6 +58,7 @@ const INITIAL_CLASSES: ClassRoom[] = [
   },
   {
     id: 'class-2',
+    userId: 'teacher-1',
     name: '8º Ano B',
     grade: '8º Ano',
     subject: 'Geografia',

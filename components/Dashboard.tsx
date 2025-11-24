@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   Clock, 
@@ -36,15 +37,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
   });
   const todayDisplay = todayFormatted.charAt(0).toUpperCase() + todayFormatted.slice(1);
 
-  // 2. Filtragem de Dados (Lógica de Sincronização)
+  // 2. Filtragem de Dados (Lógica de Sincronização E USUÁRIO)
+  const myEvents = events.filter(evt => evt.userId === user.id);
+
   const isSameDay = (d1: Date, d2: Date) => {
     return d1.getDate() === d2.getDate() &&
            d1.getMonth() === d2.getMonth() &&
            d1.getFullYear() === d2.getFullYear();
   };
 
-  // Filtra eventos de HOJE baseados no contexto global
-  const todaysEvents = events.filter(evt => isSameDay(new Date(evt.start), now));
+  // Filtra eventos de HOJE baseados no contexto global DO USUÁRIO
+  const todaysEvents = myEvents.filter(evt => isSameDay(new Date(evt.start), now));
   
   // Ordenar por horário
   todaysEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());

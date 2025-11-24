@@ -52,6 +52,7 @@ export type EventType = 'aula' | 'prova' | 'reuniao' | 'projeto' | 'atividade' |
 
 export interface CalendarEvent {
   id: string;
+  userId: string; // Added userId
   title: string;
   type: EventType;
   start: string;
@@ -151,6 +152,7 @@ export interface GeneratedActivity {
 
 export interface ClassRoom {
   id: string;
+  userId: string; // Added userId
   name: string;
   grade: string;
   subject: string;

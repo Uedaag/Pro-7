@@ -16,15 +16,22 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2
 } from 'lucide-react';
-import { BimesterPlan, LessonRow } from '../types';
+import { BimesterPlan, LessonRow, User } from '../types';
 import { generateBimesterPlan } from '../services/geminiService';
 import { useData } from '../contexts/DataContext';
 
-export const MetrarView: React.FC = () => {
+interface MetrarViewProps {
+  user: User;
+}
+
+export const MetrarView: React.FC<MetrarViewProps> = ({ user }) => {
   const { plans, addPlan, updatePlan, deletePlan, addEvent } = useData();
   
   // States
   const [isLoading, setIsLoading] = useState(false);
+  
+  // FILTRO DE USUÁRIO
+  const myPlans = plans.filter(p => p.userId === user.id);
   
   // Modais
   const [selectedPlan, setSelectedPlan] = useState<BimesterPlan | null>(null); // Pop-up 1 (Lista de Aulas)
@@ -64,7 +71,7 @@ export const MetrarView: React.FC = () => {
 
       const newPlan: BimesterPlan = {
         id: crypto.randomUUID(),
-        userId: 'current-user',
+        userId: user.id, // VINCULA AO USUÁRIO
         createdAt: new Date().toISOString(),
         ...formData,
         lessons: newLessons
@@ -255,13 +262,13 @@ export const MetrarView: React.FC = () => {
           <Folder className="text-amber-500" /> Meus Planos Bimestrais
         </h3>
 
-        {plans.length === 0 ? (
+        {myPlans.length === 0 ? (
           <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
             <p className="text-slate-400 font-medium">Nenhum plano criado ainda.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {plans.map(plan => (
+            {myPlans.map(plan => (
               <button 
                 key={plan.id}
                 onClick={() => setSelectedPlan(plan)}

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Calendar as CalendarIcon, 
@@ -14,7 +15,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
-import { CalendarEvent, EventType } from '../types';
+import { CalendarEvent, EventType, User } from '../types';
 
 // --- CONFIGURAÇÃO VISUAL ---
 const TYPE_COLORS: Record<EventType, { bg: string, text: string, border: string }> = {
@@ -42,7 +43,11 @@ const formatTimeForInput = (date: Date) => {
   return `${hours}:${minutes}`;
 };
 
-export const AgendaView: React.FC = () => {
+interface AgendaViewProps {
+  user: User;
+}
+
+export const AgendaView: React.FC<AgendaViewProps> = ({ user }) => {
   const { events, addEvent, updateEvent, deleteEvent } = useData();
   
   // Estados da View
@@ -75,7 +80,10 @@ export const AgendaView: React.FC = () => {
   };
 
   // --- FILTROS ---
-  const filteredEvents = events.filter(evt => {
+  // FILTRO DE USUÁRIO AQUI
+  const myEvents = events.filter(evt => evt.userId === user.id);
+
+  const filteredEvents = myEvents.filter(evt => {
     if (selectedType !== 'all' && evt.type !== selectedType) return false;
     return true;
   });
@@ -109,6 +117,7 @@ export const AgendaView: React.FC = () => {
     const end = new Date(year, month - 1, day, endHour, endMinute);
 
     const eventData = {
+      userId: user.id, // VINCULA AO USUÁRIO
       title: formData.get('title') as string,
       type: formData.get('type') as EventType,
       start: start.toISOString(),
