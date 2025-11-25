@@ -1,18 +1,27 @@
 import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
 import { EscapeRoomData, LessonRow, ActivityContent, Slide, Question, PresentationThemeId, PresentationPaletteId } from "../types";
 
-// Inicialização Lazy para evitar erros de runtime se process.env não estiver definido no load da página
+// Inicialização Lazy e segura para API Key
 let aiInstance: GoogleGenAI | null = null;
+
+const getApiKey = (): string => {
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_API_KEY;
+  }
+  // @ts-ignore
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  return '';
+};
 
 const getAI = (): GoogleGenAI => {
   if (!aiInstance) {
-    // Fallback seguro para evitar crash se process não existir
-    const apiKey = (typeof process !== 'undefined' && process.env && process.env.API_KEY) 
-      ? process.env.API_KEY 
-      : ''; 
-      
+    const apiKey = getApiKey();
     if (!apiKey) {
-      console.warn("API Key não encontrada. As chamadas de IA falharão.");
+      console.warn("API Key não encontrada. As chamadas de IA falharão. Configure VITE_API_KEY ou API_KEY.");
     }
     aiInstance = new GoogleGenAI({ apiKey });
   }

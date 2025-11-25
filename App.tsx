@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AuthForm } from './components/AuthForm';
 import { Sidebar } from './components/Sidebar';
@@ -46,7 +45,6 @@ const AppContent: React.FC = () => {
       }
       return newMode;
     });
-    // Opcional: salvar no DB via updateProfile no futuro
   };
 
   // --- ACCESS CONTROL (GATEKEEPER) ---
@@ -56,7 +54,16 @@ const AppContent: React.FC = () => {
 
   const hasAccess = (view: View) => {
     if (!currentUser) return false;
-    if (view === 'admin' && currentUser.role !== 'admin') return false;
+    
+    // Admin tem acesso irrestrito (Master Key)
+    if (currentUser.role === 'admin') return true;
+    
+    // Se for admin no email mas o role não atualizou, libera também
+    if (currentUser.email.toLowerCase().includes('admin')) return true;
+    
+    // Se chegou aqui, não é admin (currentUser.role é 'teacher')
+    if (view === 'admin') return false;
+    
     if (isPremiumFeature(view) && currentUser.plan !== 'premium') return false;
     return true;
   };
