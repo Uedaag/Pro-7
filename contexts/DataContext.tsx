@@ -60,6 +60,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           try {
             await timeoutPromise(5000, fetchUserProfile(session.user.id));
+            
+            // Alteração solicitada: Delay para garantir que currentUser esteja setado antes do fetch
+            setTimeout(() => {
+                fetchAllData();
+            }, 300);
+
           } catch (e) {
             console.warn("Perfil demorou a carregar, usando dados da sessão.");
             const isAdmin = session.user.email?.toLowerCase().includes('admin');
@@ -72,10 +78,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               status: 'approved',
               joinedAt: new Date().toISOString()
             });
+            // Fallback imediato se falhar o profile
+            setTimeout(() => {
+                fetchAllData();
+            }, 300);
           }
-          
-          // Carrega dados em background
-          fetchAllData(session.user.id);
         }
       } catch (err) {
         console.error("Erro na inicialização:", err);
@@ -91,7 +98,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session?.user) {
         if (session.user.id !== currentUser?.id) {
            fetchUserProfile(session.user.id).catch(console.error);
-           fetchAllData(session.user.id).catch(console.error);
+           fetchAllData().catch(console.error);
         }
       } else {
         if (mounted) {
@@ -108,12 +115,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, []); // Dependência vazia mantida conforme lógica original, mas agora confiando no delay e state update
 
   const refreshData = async () => {
-     if (currentUser) {
-         await fetchAllData(currentUser.id);
-     }
+     await fetchAllData();
   };
 
   const fetchUserProfile = async (userId: string) => {
@@ -146,7 +151,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const fetchAllData = async (userId: string) => {
+  const fetchAllData = async () => {
+    if (!currentUser) return;
+    const userId = currentUser.id;
+
     try {
       const p1 = supabase.from('events').select('*').eq('user_id', userId);
       const p2 = supabase.from('plans').select('*').eq('user_id', userId);
