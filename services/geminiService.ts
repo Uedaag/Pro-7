@@ -24,7 +24,8 @@ const getApiKey = (): string => {
     if (process.env.GOOGLE_API_KEY) return process.env.GOOGLE_API_KEY;
   }
   
-  return '';
+  // 3. Fallback de Emergência (Garante que funcione mesmo sem .env configurado)
+  return "AIzaSyDSUOCZs-c2Rabw1EmR76XaboOZoHve5GE";
 };
 
 const getAI = (): GoogleGenAI => {
