@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Filter, 
-  MoreVertical, X, Trash2, Save, Repeat, Clock, CheckCircle, List, Grid
+  MoreVertical, X, Trash2, Save, Repeat, Clock, CheckCircle, List, Grid, Users
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { CalendarEvent, EventType, User } from '../types';
@@ -32,7 +32,7 @@ const formatTimeForInput = (date: Date) => {
 };
 
 export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
-  const { events, addEvent, addEvents, updateEvent, deleteEvent } = useData();
+  const { events, classes, addEvent, addEvents, updateEvent, deleteEvent } = useData();
   
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedType, setSelectedType] = useState<EventType | 'all'>('all');
@@ -82,6 +82,10 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
     const type = formData.get('type') as EventType;
     const description = formData.get('description') as string;
     
+    const classId = formData.get('classId') as string;
+    const selectedClass = classes.find(c => c.id === classId);
+    const className = selectedClass ? `${selectedClass.name} - ${selectedClass.grade}` : undefined;
+    
     const [year, month, day] = dateStr.split('-').map(Number);
     const [startHour, startMinute] = startTime.split(':').map(Number);
     const [endHour, endMinute] = endTime.split(':').map(Number);
@@ -91,7 +95,16 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
       start.setHours(startHour, startMinute);
       const end = new Date(targetDate);
       end.setHours(endHour, endMinute);
-      return { title, type, start: start.toISOString(), end: end.toISOString(), description, userId: user.id };
+      return { 
+        title, 
+        type, 
+        start: start.toISOString(), 
+        end: end.toISOString(), 
+        description, 
+        userId: user.id,
+        classId: classId || undefined,
+        className: className
+      };
     };
 
     if (editingEvent) {
@@ -191,9 +204,14 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
                     <button 
                       key={evt.id} 
                       onClick={(e) => { e.stopPropagation(); setEditingEvent(evt); setIsModalOpen(true); }} 
-                      className={`w-full text-left px-2 py-1 rounded-md border text-[10px] font-bold truncate transition-transform hover:scale-[1.02] active:scale-95 ${TYPE_COLORS[evt.type].bg} ${TYPE_COLORS[evt.type].text} ${TYPE_COLORS[evt.type].border}`}
+                      className={`w-full text-left px-2 py-1 rounded-md border text-[10px] font-bold truncate transition-transform hover:scale-[1.02] active:scale-95 flex flex-col items-start ${TYPE_COLORS[evt.type].bg} ${TYPE_COLORS[evt.type].text} ${TYPE_COLORS[evt.type].border}`}
                     >
-                      {evt.title}
+                      <span className="truncate w-full">{evt.title}</span>
+                      {evt.className && (
+                        <span className="bg-white/50 px-1 rounded text-[8px] opacity-90 mt-0.5 truncate w-full">
+                           {evt.className}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -229,7 +247,14 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
                <span className="text-lg">{new Date(evt.start).getDate()}</span>
             </div>
             <div className="flex-1">
-               <h4 className="font-bold text-slate-800 dark:text-white">{evt.title}</h4>
+               <div className="flex items-center gap-2">
+                 <h4 className="font-bold text-slate-800 dark:text-white">{evt.title}</h4>
+                 {evt.className && (
+                    <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold">
+                       {evt.className}
+                    </span>
+                 )}
+               </div>
                <p className="text-xs text-slate-500">{new Date(evt.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(evt.end).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${TYPE_COLORS[evt.type].bg} ${TYPE_COLORS[evt.type].text}`}>
@@ -341,9 +366,29 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
                         </select>
                     </div>
                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Vincular Turma (Opcional)</label>
+                        <div className="relative">
+                           <Users size={16} className="absolute left-3 top-3.5 text-slate-400"/>
+                           <select 
+                              name="classId" 
+                              defaultValue={editingEvent?.classId || ''}
+                              className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white cursor-pointer"
+                           >
+                              <option value="">Nenhuma turma</option>
+                              {classes.map(c => (
+                                <option key={c.id} value={c.id}>{c.name} — {c.grade}</option>
+                              ))}
+                           </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Data</label>
                         <input name="date" type="date" required defaultValue={editingEvent ? formatDateForInput(new Date(editingEvent.start)) : formatDateForInput(new Date())} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white"/>
                     </div>
+                    <div></div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

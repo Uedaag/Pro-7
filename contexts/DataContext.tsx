@@ -359,6 +359,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           start: event.start,
           end: event.end,
           description: event.description,
+          class_id: event.classId,
           class_name: event.className
       }]).select().single();
       
@@ -373,6 +374,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               start: data.start,
               end: data.end,
               description: data.description,
+              classId: data.class_id,
               className: data.class_name
           }]);
       }
@@ -390,6 +392,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         start: e.start,
         end: e.end,
         description: e.description,
+        class_id: e.classId,
         class_name: e.className
     }));
     
@@ -406,6 +409,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             start: d.start,
             end: d.end,
             description: d.description,
+            classId: d.class_id,
             className: d.class_name
         }));
         setEvents(prev => [...prev, ...mappedEvents]);
@@ -419,6 +423,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         start: event.start,
         end: event.end,
         description: event.description,
+        class_id: event.classId,
         class_name: event.className
     }).eq('id', event.id);
     if (!error) {
