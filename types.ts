@@ -28,6 +28,15 @@ export type UserRole = 'admin' | 'teacher';
 export type UserPlan = 'free' | 'premium';
 export type UserStatus = 'pending' | 'approved' | 'blocked';
 
+export interface SystemSettings {
+  plan: UserPlan;
+  can_use_ia: boolean;
+  can_create_classes: boolean;
+  can_access_escape: boolean;
+  can_access_videos: boolean;
+  can_export_pdf: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -200,8 +209,13 @@ export interface DataContextType {
 
   // Admin & Users
   users: User[];
-  updateUser: (user: User) => Promise<void>;
+  updateUser: (user: User) => Promise<void>; // Atualização individual direta
+  updateUsersBatch: (users: User[]) => Promise<void>; // Atualização em lote
   deleteUser: (id: string) => Promise<void>;
+  
+  // Settings
+  systemSettings: SystemSettings[];
+  saveSystemSettings: (settings: SystemSettings[]) => Promise<void>;
 
   // Community
   posts: Post[];

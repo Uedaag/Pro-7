@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CalendarEvent, DataContextType, BimesterPlan, ClassRoom, User, Post, GeneratedActivity } from '../types';
+import { CalendarEvent, DataContextType, BimesterPlan, ClassRoom, User, Post, GeneratedActivity, SystemSettings } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
 interface ExtendedDataContextType extends DataContextType {
@@ -37,13 +37,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [classes, setClasses] = useState<ClassRoom[]>([]);
   const [users, setUsers] = useState<User[]>([]); // Para admin
   const [posts, setPosts] = useState<Post[]>([]);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings[]>([]);
 
   // --- AUTH LISTENER & DATA FETCHING ---
   useEffect(() => {
     let mounted = true;
 
     const initData = async () => {
-      // Timeout absoluto de segurança para o carregamento inicial (8 segundos)
       const safetyTimer = setTimeout(() => {
         if (mounted && loading) {
           console.warn("⚠️ Carregamento inicial excedeu o tempo limite. Liberando UI.");
@@ -57,25 +57,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) throw error;
 
         if (session?.user) {
-          // Tenta buscar perfil com timeout curto (5s)
           try {
             await timeoutPromise(5000, fetchUserProfile(session.user.id));
           } catch (e) {
             console.warn("Perfil demorou a carregar, usando dados da sessão.");
-            // Fallback: Cria usuário temporário com dados da sessão para não travar
+            const isAdmin = session.user.email?.toLowerCase().includes('admin');
             setCurrentUser({
               id: session.user.id,
               name: session.user.user_metadata?.name || 'Usuário',
               email: session.user.email || '',
-              role: 'teacher',
-              plan: 'free',
+              role: isAdmin ? 'admin' : 'teacher',
+              plan: isAdmin ? 'premium' : 'free',
               status: 'approved',
               joinedAt: new Date().toISOString()
             });
           }
           
-          // Carrega dados em segundo plano sem bloquear
           fetchAllData(session.user.id);
+        } else {
+            // Mesmo sem usuário, tenta carregar configs públicas se necessário (ou espera login)
         }
       } catch (err) {
         console.error("Erro na inicialização:", err);
@@ -90,7 +90,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         if (session.user.id !== currentUser?.id) {
-           // Se mudou o usuário, tenta buscar dados, mas não bloqueia UI se falhar
            fetchUserProfile(session.user.id).catch(console.error);
            fetchAllData(session.user.id).catch(console.error);
         }
@@ -143,21 +142,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch (error) {
-      console.error("Erro ao buscar perfil (ignorado para evitar travamento):", error);
+      console.error("Erro ao buscar perfil (ignorado):", error);
     }
   };
 
   const fetchAllData = async (userId: string) => {
-    // Executa buscas em paralelo para ser mais rápido
     try {
       const p1 = supabase.from('events').select('*').eq('user_id', userId);
       const p2 = supabase.from('plans').select('*').eq('user_id', userId);
       const p3 = supabase.from('classes').select(`*, activities(*)`).eq('user_id', userId);
       const p4 = supabase.from('community').select('*').order('created_at', { ascending: false });
+      const p5 = supabase.from('configuracoes_sistema').select('*'); // Busca Configs
 
-      const [resEvents, resPlans, resClasses, resPosts] = await Promise.all([p1, p2, p3, p4]);
+      const [resEvents, resPlans, resClasses, resPosts, resSettings] = await Promise.all([p1, p2, p3, p4, p5]);
 
-      // Processa Eventos
       if (resEvents.data) {
         setEvents(resEvents.data.map(e => ({
           id: e.id,
@@ -172,7 +170,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      // Processa Planos
       if (resPlans.data) {
          setPlans(resPlans.data.map(p => ({
             id: p.id,
@@ -188,7 +185,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          })));
       }
 
-      // Processa Turmas
       if (resClasses.data) {
         setClasses(resClasses.data.map(c => ({
             id: c.id,
@@ -211,7 +207,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      // Processa Posts
       if (resPosts.data) {
         setPosts(resPosts.data.map(p => ({
            id: p.id,
@@ -222,6 +217,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            createdAt: p.created_at,
            isPinned: p.is_pinned
         })));
+      }
+
+      if (resSettings.data && resSettings.data.length > 0) {
+          setSystemSettings(resSettings.data as SystemSettings[]);
+      } else {
+          // Defaults se vazio (REMOVIDO GOLD)
+          setSystemSettings([
+              { plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false },
+              { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true }
+          ]);
       }
 
       // Check Admin para carregar usuários
@@ -251,10 +256,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // --- AUTH ACTIONS (NON-BLOCKING) ---
-
   const signIn = async (email: string, pass: string) => {
-    // 1. Tenta autenticar
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: pass
@@ -263,33 +265,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) return { error };
 
     if (data.user) {
-      // 2. Cria perfil em "Background" (Fire and Forget)
-      // NÃO usamos 'await' aqui para não travar o login se o banco estiver lento
+      const isAdmin = email.toLowerCase().includes("admin");
+      
       (async () => {
         try {
           await supabase.from("profiles").upsert({
             id: data.user.id,
             email: email,
             name: data.user.user_metadata?.name || "",
-            role: email.includes("admin") ? "admin" : "teacher",
+            role: isAdmin ? "admin" : "teacher",
             status: "approved",
-            plan: "free",
+            plan: isAdmin ? "premium" : "free", 
             joined_at: new Date().toISOString()
           }, { onConflict: 'id' });
-          // Após criar, tenta atualizar o estado local
           await fetchUserProfile(data.user.id);
         } catch (err) {
           console.error("Erro background profile:", err);
         }
       })();
 
-      // 3. Define usuário local IMEDIATAMENTE para liberar a tela
       setCurrentUser({
         id: data.user.id,
         name: data.user.user_metadata?.name || email.split('@')[0],
         email: email,
-        role: email.includes("admin") ? "admin" : "teacher",
-        plan: 'free',
+        role: isAdmin ? "admin" : "teacher",
+        plan: isAdmin ? 'premium' : 'free',
         status: 'approved',
         joinedAt: new Date().toISOString()
       });
@@ -313,26 +313,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) return { error };
 
     if (data.user) {
-      const role = email.toLowerCase().includes('admin') ? 'admin' : 'teacher';
+      const isAdmin = email.toLowerCase().includes('admin');
+      const role = isAdmin ? 'admin' : 'teacher';
+      const plan = isAdmin ? 'premium' : 'free';
       
-      // Upsert em background
       supabase.from('profiles').upsert({
         id: data.user.id,
         email: email,
         name: name,
         role: role,
-        plan: 'free',
+        plan: plan, 
         status: 'approved',
         joined_at: new Date().toISOString()
       }, { onConflict: 'id' });
 
-      // Seta usuário local para feedback imediato
       setCurrentUser({
         id: data.user.id,
         name: name,
         email: email,
         role: role as any,
-        plan: 'free',
+        plan: plan as any,
         status: 'approved',
         joinedAt: new Date().toISOString()
       });
@@ -342,22 +342,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    // Limpeza imediata do estado local
     setCurrentUser(null);
     setEvents([]);
     setPlans([]);
     setClasses([]);
     setUsers([]);
-    
-    // Tenta avisar o Supabase, mas não bloqueia se falhar
     try {
       await supabase.auth.signOut();
     } catch (error) {
       console.warn("Logout offline/erro:", error);
     }
   };
-
-  // --- EVENTS ---
 
   const addEvent = async (event: Omit<CalendarEvent, 'id'>) => {
     if (!currentUser) return;
@@ -371,9 +366,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: event.description,
           class_name: event.className
       }]).select().single();
-
       if (error) throw error;
-
       if (data) {
           setEvents(prev => [...prev, {
               id: data.id,
@@ -402,9 +395,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: e.description,
         class_name: e.className
     }));
-
     const { data, error } = await supabase.from('events').insert(dbEvents).select();
-
     if (data) {
         const mappedEvents = data.map(d => ({
             id: d.id,
@@ -429,7 +420,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: event.description,
         class_name: event.className
     }).eq('id', event.id);
-
     if (!error) {
         setEvents(prev => prev.map(e => e.id === event.id ? event : e));
     }
@@ -441,8 +431,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setEvents(prev => prev.filter(e => e.id !== id));
     }
   };
-
-  // --- PLANS ---
 
   const addPlan = async (plan: BimesterPlan) => {
     if (!currentUser) return;
@@ -456,7 +444,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bncc_focus: plan.bnccFocus,
         lessons: JSON.stringify(plan.lessons)
     }]).select().single();
-
     if (data) {
         setPlans(prev => [...prev, { ...plan, id: data.id, userId: currentUser.id, createdAt: data.created_at }]);
     }
@@ -472,7 +459,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bncc_focus: plan.bnccFocus,
         lessons: JSON.stringify(plan.lessons)
     }).eq('id', plan.id);
-
     if (!error) {
         setPlans(prev => prev.map(p => p.id === plan.id ? plan : p));
     }
@@ -485,12 +471,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // --- CLASSES ---
-
   const addClass = async (classRoom: ClassRoom) => {
     if (!currentUser) throw new Error("Você precisa estar logado para criar uma turma.");
-
-    // Timeout de 10s para criar turma
     const promise = supabase.from('classes').insert([{
         user_id: currentUser.id,
         name: classRoom.name,
@@ -503,9 +485,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // @ts-ignore
       const { data, error } = await timeoutPromise(10000, promise);
-      
       if (error) throw error;
-
       if (data) {
           const newClass: ClassRoom = {
               id: data.id,
@@ -534,7 +514,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         shift: classRoom.shift,
         students_count: classRoom.studentsCount
     }).eq('id', classRoom.id);
-
     if (!error) {
         setClasses(prev => prev.map(c => c.id === classRoom.id ? classRoom : c));
     }
@@ -547,7 +526,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // --- USERS & ADMIN ---
+  // --- ADMIN: USERS & SETTINGS ---
 
   const updateUser = async (user: User) => {
     const { error } = await supabase.from('profiles').update({
@@ -555,12 +534,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: user.role,
         plan: user.plan,
         status: user.status,
-        theme_preference: user.themePreference,
-        avatar_url: user.avatarUrl,
-        phone: user.phone,
-        bio: user.bio,
-        education: user.education,
-        expertise: user.expertise
     }).eq('id', user.id);
 
     if (!error) {
@@ -571,6 +544,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUsersBatch = async (updatedUsers: User[]) => {
+      // Atualização em lote (sequencial para garantir)
+      for (const u of updatedUsers) {
+          const { error } = await supabase.from('profiles').update({
+              plan: u.plan,
+              status: u.status,
+              role: u.role
+          }).eq('id', u.id);
+          
+          if (error) console.error(`Erro ao atualizar usuario ${u.email}`, error);
+      }
+      
+      // Atualiza estado local
+      setUsers(prev => prev.map(u => {
+          const updated = updatedUsers.find(up => up.id === u.id);
+          return updated ? updated : u;
+      }));
+  };
+
   const deleteUser = async (id: string) => {
     const { error } = await supabase.from('profiles').delete().eq('id', id);
     if (!error) {
@@ -578,7 +570,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // --- COMMUNITY ---
+  const saveSystemSettings = async (settings: SystemSettings[]) => {
+      const { error } = await supabase.from('configuracoes_sistema').upsert(settings);
+      if (error) {
+          console.error("Erro ao salvar configurações", error);
+          throw error;
+      }
+      setSystemSettings(settings);
+  };
 
   const addPost = async (content: string, user: User) => {
     const { data, error } = await supabase.from('community').insert([{
@@ -587,7 +586,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         content: content,
         likes: 0
     }]).select().single();
-
     if (data) {
         setPosts(prev => [{
             id: data.id,
@@ -617,8 +615,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // --- ACTIVITY GENERATOR ---
-
   const addActivity = async (activity: GeneratedActivity) => {
     const { data, error } = await supabase.from('activities').insert([{
         class_id: activity.classId,
@@ -626,7 +622,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: activity.title,
         content: JSON.stringify(activity.content)
     }]).select().single();
-
     if (data) {
         const newAct: GeneratedActivity = {
             id: data.id,
@@ -636,7 +631,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             content: typeof data.content === 'string' ? JSON.parse(data.content) : data.content,
             createdAt: data.created_at
         };
-        
         setClasses(prev => prev.map(c => {
             if (c.id === activity.classId) {
                 return { ...c, generatedActivities: [...c.generatedActivities, newAct] };
@@ -668,7 +662,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deleteClass,
       users,
       updateUser,
+      updateUsersBatch,
       deleteUser,
+      systemSettings,
+      saveSystemSettings,
       posts,
       addPost,
       deletePost,
