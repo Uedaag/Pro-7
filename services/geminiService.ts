@@ -5,30 +5,23 @@ import { EscapeRoomData, LessonRow, ActivityContent, Slide, Question, Presentati
 let aiInstance: GoogleGenAI | null = null;
 
 const getApiKey = (): string => {
-  const keys = [
-    'VITE_API_KEY', 
-    'NEXT_PUBLIC_API_KEY', 
-    'REACT_APP_API_KEY',
-    'VITE_GOOGLE_API_KEY',
-    'NEXT_PUBLIC_GOOGLE_API_KEY'
-  ];
-
-  // Verifica import.meta.env (Vite)
+  // 1. Prioridade: Variáveis VITE (Padrão para este projeto)
   // @ts-ignore
   if (typeof import.meta !== 'undefined' && import.meta.env) {
-    for (const key of keys) {
-      // @ts-ignore
-      if (import.meta.env[key]) return import.meta.env[key];
-    }
+    // @ts-ignore
+    if (import.meta.env.VITE_GOOGLE_API_KEY) return import.meta.env.VITE_GOOGLE_API_KEY;
+    // @ts-ignore
+    if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+    // @ts-ignore
+    if (import.meta.env.NEXT_PUBLIC_GOOGLE_API_KEY) return import.meta.env.NEXT_PUBLIC_GOOGLE_API_KEY;
   }
 
-  // Verifica process.env (Create React App / Next.js)
-  // @ts-ignore
+  // 2. Fallback: Process Env (Para builds que injetam process.env)
   if (typeof process !== 'undefined' && process.env) {
-    if (process.env.API_KEY) return process.env.API_KEY; // Padrão do backend/docker
-    for (const key of keys) {
-      if (process.env[key]) return process.env[key];
-    }
+    if (process.env.VITE_GOOGLE_API_KEY) return process.env.VITE_GOOGLE_API_KEY;
+    if (process.env.NEXT_PUBLIC_GOOGLE_API_KEY) return process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+    if (process.env.REACT_APP_GOOGLE_API_KEY) return process.env.REACT_APP_GOOGLE_API_KEY;
+    if (process.env.GOOGLE_API_KEY) return process.env.GOOGLE_API_KEY;
   }
   
   return '';
@@ -38,7 +31,7 @@ const getAI = (): GoogleGenAI => {
   if (!aiInstance) {
     const apiKey = getApiKey();
     if (!apiKey) {
-      console.warn("API Key não encontrada. As chamadas de IA falharão. Configure VITE_API_KEY ou API_KEY.");
+      throw new Error("Chave de API não encontrada. Configure a variável VITE_GOOGLE_API_KEY no Vercel.");
     }
     aiInstance = new GoogleGenAI({ apiKey });
   }
@@ -166,7 +159,7 @@ export const createTeacherAssistantChat = (): Chat => {
   });
 };
 
-// --- FUNÇÕES DE GERAÇÃO EXISTENTES ---
+// --- FUNÇÕES DE GERAÇÃO ---
 
 export const generateEscapeRoom = async (topic: string, grade: string, duration: string, difficulty: string): Promise<EscapeRoomData> => {
   const modelId = "gemini-3-pro-preview";
@@ -180,7 +173,10 @@ export const generateEscapeRoom = async (topic: string, grade: string, duration:
       config: { responseMimeType: "application/json", responseSchema: escapeRoomSchema }
     });
     return JSON.parse(response.text.replace(/```json|```/g, '').trim()) as EscapeRoomData;
-  } catch (error) { throw error; }
+  } catch (error: any) {
+    console.error("Erro Generate Escape Room:", error);
+    throw new Error(error.message || "Erro ao gerar Escape Room");
+  }
 };
 
 export const generateSceneImage = async (imagePrompt: string): Promise<string> => {
@@ -212,7 +208,10 @@ export const generateBimesterPlan = async (subject: string, grade: string, total
       config: { responseMimeType: "application/json", responseSchema: metrarSchema }
     });
     return JSON.parse(response.text.replace(/```json|```/g, '').trim());
-  } catch (error) { throw error; }
+  } catch (error: any) {
+    console.error("Erro Generate Plan:", error);
+    throw new Error(error.message || "Erro ao gerar plano");
+  }
 };
 
 export const generateEducationalActivity = async (
@@ -287,7 +286,6 @@ export const generateEducationalActivity = async (
     };
 
     // --- GERAÇÃO PARALELA DE IMAGENS ---
-    // Usamos um array de promises para gerar TODAS as imagens necessárias de uma vez
     const imagePromises: Promise<void>[] = [];
     
     // 1. Capa Principal
@@ -299,7 +297,7 @@ export const generateEducationalActivity = async (
         );
     }
 
-    // 2. Imagens dos Slides (TODOS os slides devem ter imagem)
+    // 2. Imagens dos Slides
     if (isPresentation && parsedData.slides) {
         parsedData.slides.forEach((slide: Slide, index: number) => {
             const prompt = slide.imagePrompt || `Educational illustration about ${slide.title}`;
@@ -315,13 +313,12 @@ export const generateEducationalActivity = async (
         });
     }
 
-    // Aguarda todas as imagens serem geradas (ou falharem)
     await Promise.all(imagePromises);
 
     return activityContent;
 
-  } catch (error) {
-    console.error("Erro na geração estruturada:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Erro Generate Activity:", error);
+    throw new Error(error.message || "Erro ao gerar atividade");
   }
 };

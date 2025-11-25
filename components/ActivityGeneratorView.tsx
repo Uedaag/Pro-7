@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Save, Users, Calendar, BookOpen, Type, 
@@ -67,8 +66,8 @@ export const ActivityGeneratorView: React.FC = () => {
       );
       
       setResult(data);
-    } catch (e) { 
-      alert("Erro ao gerar atividade. Tente novamente."); 
+    } catch (e: any) { 
+      alert("Erro ao gerar atividade: " + e.message); 
     } finally { 
       setIsLoading(false); 
     }

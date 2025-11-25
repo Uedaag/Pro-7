@@ -3,7 +3,7 @@ import { InputForm } from './InputForm';
 import { EscapeRoomDisplay } from './EscapeRoomDisplay';
 import { generateEscapeRoom } from '../services/geminiService';
 import { EscapeRoomData } from '../types';
-import { Sparkles, BrainCircuit, Gamepad2 } from 'lucide-react';
+import { Sparkles, BrainCircuit, Gamepad2, AlertCircle } from 'lucide-react';
 
 export const GamesContainer: React.FC = () => {
   const [data, setData] = useState<EscapeRoomData | null>(null);
@@ -16,9 +16,9 @@ export const GamesContainer: React.FC = () => {
     try {
       const result = await generateEscapeRoom(topic, grade, duration, difficulty);
       setData(result);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Ocorreu um erro ao gerar o Escape Room. Por favor, verifique sua chave API ou tente novamente.");
+      setError(err.message || "Ocorreu um erro desconhecido. Verifique sua conexão e a chave de API.");
     } finally {
       setIsLoading(false);
     }
@@ -47,8 +47,12 @@ export const GamesContainer: React.FC = () => {
           </div>
 
           {error && (
-             <div className="w-full max-w-md mb-6 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-center text-sm">
-               {error}
+             <div className="w-full max-w-2xl mb-6 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 p-4 rounded-xl flex items-start gap-3 text-sm text-left shadow-sm">
+               <AlertCircle className="shrink-0 mt-0.5" size={18} />
+               <div>
+                 <p className="font-bold mb-1">Falha na Geração</p>
+                 <p>{error}</p>
+               </div>
              </div>
           )}
 
