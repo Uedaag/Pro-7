@@ -42,12 +42,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   
   const handleLogoutClick = async () => {
-    if (window.confirm("Tem certeza que deseja sair da sua conta?")) {
-      try {
-        await onLogout();
-      } catch (error) {
-        console.error("Erro ao sair:", error);
-      }
+    // Removido o window.confirm para evitar bloqueios do navegador e garantir logout imediato
+    try {
+      await onLogout();
+    } catch (error) {
+      console.error("Erro ao tentar sair:", error);
     }
   };
 

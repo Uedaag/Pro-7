@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 
 interface ExtendedDataContextType extends DataContextType {
   addActivity: (activity: GeneratedActivity) => Promise<void>;
+  refreshData: () => Promise<void>;
 }
 
 const DataContext = createContext<ExtendedDataContextType | undefined>(undefined);
@@ -22,12 +23,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // --- AUTH LISTENER & DATA FETCHING ---
   useEffect(() => {
     const initData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        await fetchUserProfile(session.user.id);
-        await fetchAllData(session.user.id);
-      } else {
+      // Timeout de segurança: Se o Supabase não responder em 3s, libera o carregamento
+      const safetyTimeout = setTimeout(() => {
+        if (loading) {
+          console.warn("Supabase timeout - Forçando liberação da UI");
+          setLoading(false);
+        }
+      }, 3000);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
+          await fetchAllData(session.user.id);
+        }
+      } catch (err) {
+        console.error("Erro na inicialização:", err);
+      } finally {
+        clearTimeout(safetyTimeout);
         setLoading(false);
       }
     };
@@ -54,6 +68,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+  const refreshData = async () => {
+     if (currentUser) {
+         await fetchAllData(currentUser.id);
+     }
+  };
 
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -87,7 +107,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchAllData = async (userId: string) => {
-    setLoading(true);
     try {
       // 1. Events
       const { data: eventsData } = await supabase.from('events').select('*').eq('user_id', userId);
@@ -165,7 +184,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 5. Admin check to fetch all users
-      // Check current user role from the fetched profile data directly
       // Precisamos verificar o role do usuário ATUAL, não o estado anterior
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
       
@@ -192,8 +210,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     } catch (e) {
       console.error(e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -256,13 +272,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    // Limpeza explicita e imediata do estado para garantir atualização da UI
-    setCurrentUser(null);
-    setEvents([]);
-    setPlans([]);
-    setClasses([]);
-    setUsers([]);
+    // Tenta deslogar no Supabase, mas limpa o estado LOCAL de qualquer forma
+    // Isso evita que a UI fique presa se houver erro de rede
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Erro no logout Supabase:", error);
+    } finally {
+      setCurrentUser(null);
+      setEvents([]);
+      setPlans([]);
+      setClasses([]);
+      setUsers([]);
+      // localStorage.clear(); // Opcional: limpeza agressiva se necessário
+    }
   };
 
   // --- EVENTS ---
@@ -563,7 +586,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addPost,
       deletePost,
       likePost,
-      addActivity
+      addActivity,
+      refreshData
     }}>
       {children}
     </DataContext.Provider>
