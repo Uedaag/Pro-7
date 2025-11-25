@@ -14,7 +14,7 @@ const DataContext = createContext<ExtendedDataContextType | undefined>(undefined
 const timeoutPromise = (ms: number, promise: Promise<any>) => {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error("TIMEOUT"));
+      reject(new Error("O servidor demorou muito para responder. Verifique sua conexão."));
     }, ms);
     promise
       .then(res => {
@@ -44,6 +44,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let mounted = true;
 
     const initData = async () => {
+      // Timeout de segurança para não travar a tela de loading infinitamente
       const safetyTimer = setTimeout(() => {
         if (mounted && loading) {
           console.warn("⚠️ Carregamento inicial excedeu o tempo limite. Liberando UI.");
@@ -73,9 +74,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
           
+          // Carrega dados em background
           fetchAllData(session.user.id);
-        } else {
-            // Mesmo sem usuário, tenta carregar configs públicas se necessário (ou espera login)
         }
       } catch (err) {
         console.error("Erro na inicialização:", err);
@@ -152,7 +152,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const p2 = supabase.from('plans').select('*').eq('user_id', userId);
       const p3 = supabase.from('classes').select(`*, activities(*)`).eq('user_id', userId);
       const p4 = supabase.from('community').select('*').order('created_at', { ascending: false });
-      const p5 = supabase.from('configuracoes_sistema').select('*'); // Busca Configs
+      const p5 = supabase.from('configuracoes_sistema').select('*');
 
       const [resEvents, resPlans, resClasses, resPosts, resSettings] = await Promise.all([p1, p2, p3, p4, p5]);
 
@@ -222,7 +222,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (resSettings.data && resSettings.data.length > 0) {
           setSystemSettings(resSettings.data as SystemSettings[]);
       } else {
-          // Defaults se vazio (REMOVIDO GOLD)
           setSystemSettings([
               { plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false },
               { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true }
@@ -266,30 +265,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (data.user) {
       const isAdmin = email.toLowerCase().includes("admin");
-      
-      (async () => {
-        try {
-          await supabase.from("profiles").upsert({
-            id: data.user.id,
-            email: email,
-            name: data.user.user_metadata?.name || "",
-            role: isAdmin ? "admin" : "teacher",
-            status: "approved",
-            plan: isAdmin ? "premium" : "free", 
-            joined_at: new Date().toISOString()
-          }, { onConflict: 'id' });
-          await fetchUserProfile(data.user.id);
-        } catch (err) {
-          console.error("Erro background profile:", err);
-        }
-      })();
+      const role = isAdmin ? "admin" : "teacher";
+      const plan = isAdmin ? "premium" : "free";
+
+      // Fire and forget update profile
+      supabase.from("profiles").upsert({
+        id: data.user.id,
+        email: email,
+        name: data.user.user_metadata?.name || "",
+        role: role,
+        status: "approved",
+        plan: plan, 
+        joined_at: new Date().toISOString()
+      }, { onConflict: 'id' }).then(() => fetchUserProfile(data.user.id));
 
       setCurrentUser({
         id: data.user.id,
         name: data.user.user_metadata?.name || email.split('@')[0],
         email: email,
-        role: isAdmin ? "admin" : "teacher",
-        plan: isAdmin ? 'premium' : 'free',
+        role: role as any,
+        plan: plan as any,
         status: 'approved',
         joinedAt: new Date().toISOString()
       });
@@ -366,7 +361,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: event.description,
           class_name: event.className
       }]).select().single();
-      if (error) throw error;
+      
+      if (error) throw new Error(error.message);
+      
       if (data) {
           setEvents(prev => [...prev, {
               id: data.id,
@@ -395,7 +392,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: e.description,
         class_name: e.className
     }));
+    
     const { data, error } = await supabase.from('events').insert(dbEvents).select();
+    
+    if (error) throw new Error(error.message);
+
     if (data) {
         const mappedEvents = data.map(d => ({
             id: d.id,
@@ -444,6 +445,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bncc_focus: plan.bnccFocus,
         lessons: JSON.stringify(plan.lessons)
     }]).select().single();
+    
+    if (error) throw new Error(error.message);
+
     if (data) {
         setPlans(prev => [...prev, { ...plan, id: data.id, userId: currentUser.id, createdAt: data.created_at }]);
     }
@@ -471,38 +475,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // --- Função AddClass Corrigida ---
   const addClass = async (classRoom: ClassRoom) => {
     if (!currentUser) throw new Error("Você precisa estar logado para criar uma turma.");
-    const promise = supabase.from('classes').insert([{
-        user_id: currentUser.id,
-        name: classRoom.name,
-        grade: classRoom.grade,
-        subject: classRoom.subject,
-        shift: classRoom.shift,
-        students_count: classRoom.studentsCount || 0
-    }]).select().single();
-
+    
     try {
-      // @ts-ignore
-      const { data, error } = await timeoutPromise(10000, promise);
-      if (error) throw error;
-      if (data) {
-          const newClass: ClassRoom = {
-              id: data.id,
-              userId: data.user_id,
-              name: data.name,
-              grade: data.grade,
-              subject: data.subject,
-              shift: data.shift,
-              studentsCount: data.students_count,
-              linkedPlanIds: [],
-              generatedActivities: []
-          };
-          setClasses(prev => [...prev, newClass]);
-      }
+        const { data, error } = await supabase.from('classes').insert([{
+            user_id: currentUser.id,
+            name: classRoom.name,
+            grade: classRoom.grade,
+            subject: classRoom.subject,
+            shift: classRoom.shift,
+            students_count: classRoom.studentsCount || 0
+        }]).select().single();
+
+        if (error) {
+            console.error("Supabase AddClass Error:", error);
+            throw new Error(error.message || "Erro desconhecido ao criar turma.");
+        }
+
+        if (data) {
+            const newClass: ClassRoom = {
+                id: data.id,
+                userId: data.user_id,
+                name: data.name,
+                grade: data.grade,
+                subject: data.subject,
+                shift: data.shift,
+                studentsCount: data.students_count,
+                linkedPlanIds: [],
+                generatedActivities: []
+            };
+            setClasses(prev => [...prev, newClass]);
+        }
     } catch (err: any) {
-       console.error("Erro addClass:", err);
-       throw new Error("Não foi possível criar a turma. Verifique sua conexão.");
+       throw new Error(err.message || "Erro ao criar turma.");
     }
   };
 
@@ -545,7 +552,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUsersBatch = async (updatedUsers: User[]) => {
-      // Atualização em lote (sequencial para garantir)
       for (const u of updatedUsers) {
           const { error } = await supabase.from('profiles').update({
               plan: u.plan,
@@ -556,7 +562,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (error) console.error(`Erro ao atualizar usuario ${u.email}`, error);
       }
       
-      // Atualiza estado local
       setUsers(prev => prev.map(u => {
           const updated = updatedUsers.find(up => up.id === u.id);
           return updated ? updated : u;
@@ -570,12 +575,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // --- Função SaveSettings Corrigida ---
   const saveSystemSettings = async (settings: SystemSettings[]) => {
       const { error } = await supabase.from('configuracoes_sistema').upsert(settings);
+      
       if (error) {
-          console.error("Erro ao salvar configurações", error);
-          throw error;
+          console.error("Supabase SaveSettings Error:", error);
+          throw new Error(error.message || "Erro desconhecido ao salvar configurações.");
       }
+      
       setSystemSettings(settings);
   };
 
@@ -622,6 +630,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: activity.title,
         content: JSON.stringify(activity.content)
     }]).select().single();
+    
+    if (error) throw new Error(error.message);
+
     if (data) {
         const newAct: GeneratedActivity = {
             id: data.id,
