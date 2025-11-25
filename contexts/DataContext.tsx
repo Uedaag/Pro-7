@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CalendarEvent, DataContextType, BimesterPlan, ClassRoom, User, Post, GeneratedActivity } from '../types';
 import { supabase } from '../lib/supabaseClient';
@@ -55,6 +56,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      // Tenta buscar o perfil. Pode não existir imediatamente se o trigger tiver lag.
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -94,7 +96,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           userId: e.user_id,
           title: e.title,
           type: e.type,
-          start: e.start,
+          start: e.start, // O Supabase retorna string ISO
           end: e.end,
           description: e.description,
           classId: e.class_id,
@@ -113,7 +115,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             bimester: p.bimester,
             totalLessons: p.total_lessons,
             theme: p.theme,
-            bnccFocus: p.bncc_focus,
+            bncc_focus: p.bncc_focus,
             lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons,
             createdAt: p.created_at
          })));
@@ -162,7 +164,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 5. Admin check to fetch all users
-      // Check current user role from the fetched profile data or local state
+      // Check current user role from the fetched profile data directly
+      // Precisamos verificar o role do usuário ATUAL, não o estado anterior
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
       
       if (profile?.role === 'admin') {
@@ -196,7 +199,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // --- AUTH ACTIONS ---
 
   const signIn = async (email: string, pass: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass
+    });
+
+    if (!error && data.user) {
+      // Se o perfil NÃO existir, cria aqui automaticamente
+      await supabase.from("profiles").upsert({
+        id: data.user.id,
+        email: email,
+        name: data.user.user_metadata?.name || "",
+        role: email.includes("admin") ? "admin" : "teacher",
+        status: "approved",
+        plan: "free",
+        joined_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+    }
+
     return { error };
   };
 
@@ -205,9 +225,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email,
       password: pass,
       options: {
-        data: { name }
+        emailRedirectTo: window.location.origin,
+        data: { name },
+        // @ts-ignore
+        shouldCreateUser: true
       }
     });
+
+    if (!error && data.user) {
+      // Regra automática para Admin: se o email conter 'admin', vira admin
+      // Isso é redundante com o Trigger do SQL, mas garante atualização imediata da UI
+      const role = email.toLowerCase().includes('admin') ? 'admin' : 'teacher';
+      
+      // UPSERT no perfil: garante que os dados estejam lá, seja via trigger ou client-side
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: data.user.id,
+        email: email,
+        name: name,
+        role: role, // Força o role aqui também para o frontend
+        plan: 'free',
+        status: 'approved',
+        joined_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+      if (profileError) {
+         console.warn("Nota: Criação de perfil via cliente falhou (provavelmente já criado pelo Trigger):", profileError.message);
+      }
+    }
+
     return { error };
   };
 
@@ -367,7 +412,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateClass = async (classRoom: ClassRoom) => {
-    // Atualiza dados básicos
     const { error } = await supabase.from('classes').update({
         name: classRoom.name,
         grade: classRoom.grade,
@@ -376,8 +420,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         students_count: classRoom.studentsCount
     }).eq('id', classRoom.id);
 
-    // Se houver novas atividades (adicionadas localmente antes do sync), 
-    // idealmente usamos addActivity, mas aqui sincronizamos o estado local
     if (!error) {
         setClasses(prev => prev.map(c => c.id === classRoom.id ? classRoom : c));
     }
@@ -393,7 +435,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // --- USERS & ADMIN ---
 
   const updateUser = async (user: User) => {
-    // Atualiza tabela profiles
     const { error } = await supabase.from('profiles').update({
         name: user.name,
         role: user.role,
@@ -416,9 +457,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteUser = async (id: string) => {
-    // Deletar usuário do Auth requer Service Role, que não é seguro no client.
-    // Aqui deletamos apenas o profile (soft delete) ou bloqueamos.
-    // Para fins deste exemplo, deletamos da tabela profiles.
     const { error } = await supabase.from('profiles').delete().eq('id', id);
     if (!error) {
         setUsers(prev => prev.filter(u => u.id !== id));
@@ -484,7 +522,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdAt: data.created_at
         };
         
-        // Atualiza a classe localmente
         setClasses(prev => prev.map(c => {
             if (c.id === activity.classId) {
                 return { ...c, generatedActivities: [...c.generatedActivities, newAct] };
