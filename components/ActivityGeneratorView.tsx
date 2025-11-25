@@ -7,14 +7,15 @@ import {
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { generateEducationalActivity } from '../services/geminiService';
-import { ActivityContent, ActivityType } from '../types';
+import { ActivityContent, ActivityType, GeneratedActivity } from '../types';
 
 export const ActivityGeneratorView: React.FC = () => {
-  const { classes, events, plans, updateClass } = useData();
+  const { classes, events, plans, addActivity } = useData();
   
   // Controle de Passos
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Estados dos Dados
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -75,32 +76,35 @@ export const ActivityGeneratorView: React.FC = () => {
 
   const handleSave = async () => {
     if (!currentClass || !result) return;
+    setIsSaving(true);
     
-    // updateClass no Context deve lidar com o insert na tabela activities
-    // Criamos um objeto temporário para passar pro context, o ID real vem do banco depois
-    const newActivity: any = {
-       id: crypto.randomUUID(), 
-       classId: currentClass.id,
-       type: selectedType,
-       title: result.header.title,
-       content: result,
-       relatedLessonIds: []
-    };
-    
-    // Atualiza via contexto (que salva no Supabase)
-    await updateClass({
-        ...currentClass,
-        generatedActivities: [...currentClass.generatedActivities, newActivity]
-    }); // Esta função no DataContext já tem a lógica de insert na tabela 'activities'
+    try {
+        const newActivity: GeneratedActivity = {
+           id: '', // O ID será gerado pelo banco
+           classId: currentClass.id,
+           type: selectedType,
+           title: result.header.title,
+           content: result,
+           createdAt: new Date().toISOString(),
+           relatedLessonIds: []
+        };
+        
+        // Usa a função correta para inserir na tabela activities
+        await addActivity(newActivity);
 
-    alert("Atividade salva com sucesso na turma!");
-    
-    // Reset
-    setResult(null);
-    setStep(1);
-    setSelectedClassId('');
-    setManualTopic('');
-    setSelectedContentText('');
+        alert("Atividade salva com sucesso na turma!");
+        
+        // Reset
+        setResult(null);
+        setStep(1);
+        setSelectedClassId('');
+        setManualTopic('');
+        setSelectedContentText('');
+    } catch (e: any) {
+        alert("Erro ao salvar atividade: " + e.message);
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   // --- RENDERIZADORES DE ETAPAS ---
@@ -304,9 +308,11 @@ export const ActivityGeneratorView: React.FC = () => {
 
             <button 
               onClick={handleSave}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-3 transition-transform hover:-translate-y-1"
+              disabled={isSaving}
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-3 transition-transform hover:-translate-y-1 disabled:opacity-50"
             >
-              <Save size={20} /> Salvar na Turma ({currentClass?.name})
+              {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20} />}
+              {isSaving ? 'Salvando...' : `Salvar na Turma (${currentClass?.name})`}
             </button>
           </div>
         </div>

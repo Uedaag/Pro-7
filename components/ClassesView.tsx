@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Users, Plus, Trash2, ChevronLeft, Calendar as CalendarIcon,
-  X, Eye, Printer, Presentation, ChevronRight, Image as ImageIcon, BookOpen, FileText, Loader2
+  X, Eye, Printer, Presentation, ChevronRight, Image as ImageIcon, BookOpen, FileText, Loader2, Clock
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { ClassRoom, View, GeneratedActivity, ActivityContent } from '../types';
@@ -161,11 +161,15 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
   );
 };
 
-// ... ClassDetailView e helpers mantidos, mas usando hooks atualizados ...
-// Para brevidade, replico o ClassDetailView simplificado conectado ao DB
 const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNavigate?: (view: View) => void }> = ({ classRoom, onBack, onNavigate }) => {
+  const { events } = useData(); // Consumir eventos do contexto
   const [activeTab, setActiveTab] = useState<'aulas' | 'planos' | 'atividades'>('aulas');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
+
+  // Filtrar eventos desta turma e ordenar por data (mais recente primeiro)
+  const classEvents = events
+    .filter(evt => evt.classId === classRoom.id)
+    .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
 
   return (
     <div className="max-w-6xl mx-auto pb-20 animate-fade-in">
@@ -185,6 +189,50 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
          </div>
 
          <div className="p-8">
+            {/* ABA: AULAS (AGENDA) */}
+            {activeTab === 'aulas' && (
+              <div className="space-y-6">
+                 <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700">Cronograma da Turma</h3>
+                    <button onClick={() => onNavigate?.('agenda')} className="text-purple-600 text-xs font-bold hover:underline flex items-center gap-1">
+                      <Plus size={14}/> Agendar na Agenda
+                    </button>
+                 </div>
+
+                 {classEvents.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                       <CalendarIcon size={32} className="mx-auto mb-2 opacity-50"/>
+                       <p>Nenhuma aula ou evento vinculado a esta turma.</p>
+                       <p className="text-xs mt-1">Use a Agenda e selecione esta turma ao criar o evento.</p>
+                    </div>
+                 ) : (
+                    <div className="space-y-3">
+                       {classEvents.map(evt => (
+                          <div key={evt.id} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-purple-200 transition-colors">
+                              <div className="flex flex-col items-center justify-center w-14 h-14 bg-slate-50 rounded-lg border border-slate-100 text-slate-600 shrink-0">
+                                  <span className="text-[10px] font-bold uppercase">{new Date(evt.start).toLocaleDateString('pt-BR', {weekday: 'short'}).replace('.', '')}</span>
+                                  <span className="text-lg font-black">{new Date(evt.start).getDate()}</span>
+                              </div>
+                              <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${evt.type === 'prova' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                        {evt.type}
+                                      </span>
+                                      <span className="text-xs text-slate-400 flex items-center gap-1">
+                                        <Clock size={12}/> {new Date(evt.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                      </span>
+                                  </div>
+                                  <h4 className="font-bold text-slate-800">{evt.title}</h4>
+                                  {evt.description && <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{evt.description}</p>}
+                              </div>
+                          </div>
+                       ))}
+                    </div>
+                 )}
+              </div>
+            )}
+
+            {/* ABA: ATIVIDADES */}
             {activeTab === 'atividades' && (
                 <div className="space-y-6">
                     <div className="flex justify-between items-center">
@@ -207,11 +255,30 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
                     )}
                 </div>
             )}
-             {activeTab === 'aulas' && <div className="text-center text-slate-400 py-10">Use a Agenda para marcar aulas para esta turma.</div>}
+             
              {activeTab === 'planos' && <div className="text-center text-slate-400 py-10">Use a seção Planos de Aula para vincular conteúdos.</div>}
          </div>
       </div>
-      {/* Detalhes de atividade omitidos para brevidade, lógica similar ao anterior */}
+      
+      {/* MODAL DE VISUALIZAÇÃO DE ATIVIDADE (Simplificado) */}
+      {selectedActivity && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+           <div className="bg-white w-full max-w-3xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+              <div className="p-4 border-b flex justify-between items-center">
+                 <h3 className="font-bold">{selectedActivity.title}</h3>
+                 <button onClick={() => setSelectedActivity(null)}><X size={20}/></button>
+              </div>
+              <div className="flex-1 p-8 overflow-y-auto bg-slate-50">
+                 <div className="prose max-w-none">
+                    <pre className="whitespace-pre-wrap text-sm text-slate-600">{JSON.stringify(selectedActivity.content, null, 2)}</pre>
+                 </div>
+              </div>
+              <div className="p-4 border-t bg-white flex justify-end gap-2">
+                 <button onClick={() => generatePPTX(selectedActivity.content)} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-bold flex items-center gap-2"><Presentation size={16}/> Baixar PPTX</button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

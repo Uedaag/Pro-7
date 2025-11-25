@@ -24,7 +24,7 @@ export const AuthForm: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   
   // Timer de segurança para evitar travamento eterno
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');

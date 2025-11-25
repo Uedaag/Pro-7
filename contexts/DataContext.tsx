@@ -48,7 +48,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const user = session.user;
     const isAdmin = user.email?.toLowerCase().includes('admin') ?? false;
 
-    // Define usuário base imediatamente para desbloquear a UI
     const baseUser: User = {
       id: user.id,
       name: (user.user_metadata as any)?.name || user.email?.split('@')[0] || 'Usuário',
@@ -60,7 +59,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       themePreference: 'light'
     };
 
-    // Verifica perfil completo no banco
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -69,7 +67,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (profile && !error) {
-        // Atualiza com dados do banco
         setCurrentUser({
           ...baseUser,
           name: profile.name || baseUser.name,
@@ -112,72 +109,87 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // -------------------------------------------------
-  // 2. Busca de Dados (Reativa ao currentUser)
+  // 2. Busca de Dados (Resiliente e Isolada)
   // -------------------------------------------------
   useEffect(() => {
     if (currentUser?.id) {
       fetchAllData(currentUser.id);
     }
-  }, [currentUser?.id]); // Só roda quando o ID do usuário muda/existe
+  }, [currentUser?.id]);
 
   const fetchAllData = async (userId: string) => {
     console.log('[DATA] Carregando dados para userId:', userId);
 
+    // 1. Eventos (Agenda)
     try {
-      const p1 = supabase.from('events').select('*').eq('user_id', userId);
-      const p2 = supabase.from('plans').select('*').eq('user_id', userId);
-      const p3 = supabase.from('classes').select('*, activities(*)').eq('user_id', userId);
-      const p4 = supabase.from('community').select('*').order('created_at', { ascending: false });
-      const p5 = supabase.from('configuracoes_sistema').select('*');
-
-      const [resEvents, resPlans, resClasses, resPosts, resSettings] = await Promise.all([
-        p1, p2, p3, p4, p5
-      ]);
-
-      if (resEvents.data) {
-        setEvents(resEvents.data.map(e => ({
+      const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
+      if (data) {
+        setEvents(data.map(e => ({
           id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
         })));
       }
+    } catch (e) { console.error('[DATA] Erro events:', e); }
 
-      if (resPlans.data) {
-        setPlans(resPlans.data.map(p => ({
+    // 2. Planos de Aula
+    try {
+      const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId);
+      if (data) {
+        setPlans(data.map(p => ({
           id: p.id, userId: p.user_id, className: p.class_name, subject: p.subject, bimester: p.bimester, totalLessons: p.total_lessons, theme: p.theme, bnccFocus: p.bncc_focus, lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons, createdAt: p.created_at
         })));
       }
+    } catch (e) { console.error('[DATA] Erro plans:', e); }
 
-      if (resClasses.data) {
-        setClasses(resClasses.data.map(c => ({
+    // 3. Turmas (Classes) - Com fallback se activities falhar
+    try {
+      let res = await supabase.from('classes').select('*, activities(*)').eq('user_id', userId);
+      
+      // Se falhar no join (ex: tabela activities não existe), tenta pegar só as classes
+      if (res.error) {
+         console.warn('[DATA] Falha ao buscar activities vinculadas, buscando apenas classes.', res.error.message);
+         res = await supabase.from('classes').select('*').eq('user_id', userId);
+      }
+
+      if (res.data) {
+        setClasses(res.data.map(c => ({
           id: c.id, userId: c.user_id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, studentsCount: c.students_count, linkedPlanIds: c.linked_plan_ids || [],
           generatedActivities: c.activities?.map((a: any) => ({
             id: a.id, classId: a.class_id, type: a.type, title: a.title, content: typeof a.content === 'string' ? JSON.parse(a.content) : a.content, createdAt: a.created_at, relatedLessonIds: a.related_lesson_ids || []
           })) || []
         })));
       }
+    } catch (e) { console.error('[DATA] Erro classes:', e); }
 
-      if (resPosts.data) {
-        setPosts(resPosts.data.map(p => ({
+    // 4. Comunidade (Posts)
+    try {
+      const { data, error } = await supabase.from('community').select('*').order('created_at', { ascending: false });
+      if (data) {
+        setPosts(data.map(p => ({
           id: p.id, userId: p.user_id, userName: p.user_name, content: p.content, likes: p.likes, createdAt: p.created_at, isPinned: p.is_pinned
         })));
       }
+    } catch (e) { console.error('[DATA] Erro posts:', e); }
 
-      if (resSettings.data && resSettings.data.length > 0) {
-        setSystemSettings(resSettings.data as SystemSettings[]);
+    // 5. Configurações
+    try {
+      const { data, error } = await supabase.from('configuracoes_sistema').select('*');
+      if (data && data.length > 0) {
+        setSystemSettings(data as SystemSettings[]);
       } else {
         setSystemSettings([{ plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false }, { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true }]);
       }
+    } catch (e) { console.error('[DATA] Erro settings:', e); }
 
-      // Admin: Carregar todos usuários
-      if (currentUser?.role === 'admin') {
-        const { data: allProfiles } = await supabase.from('profiles').select('*');
-        if (allProfiles) {
-          setUsers(allProfiles.map(u => ({
+    // 6. Admin - Usuários
+    if (currentUser?.role === 'admin') {
+      try {
+        const { data } = await supabase.from('profiles').select('*');
+        if (data) {
+          setUsers(data.map(u => ({
             id: u.id, name: u.name, email: u.email, role: u.role, plan: u.plan, status: u.status, joinedAt: u.joined_at, themePreference: u.theme_preference, avatarUrl: u.avatar_url, phone: u.phone, bio: u.bio, education: u.education, expertise: u.expertise
           })));
         }
-      }
-    } catch (e) {
-      console.error('[DATA] Erro parcial ao buscar dados:', e);
+      } catch (e) { console.error('[DATA] Erro users:', e); }
     }
   };
 
@@ -186,16 +198,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchAllData(currentUser.id);
   };
 
-  // -------------------------------------------------
-  // 3. Auth Actions
-  // -------------------------------------------------
+  // --- Auth Functions ---
   const signIn = async (email: string, pass: string) => {
     setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) {
-        setLoading(false);
-        return { error };
-    }
+    if (error) { setLoading(false); return { error }; }
     if (data.user) {
         const isAdmin = email.toLowerCase().includes('admin');
         await supabase.from('profiles').upsert({
@@ -219,15 +226,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: null };
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const signOut = async () => { await supabase.auth.signOut(); };
 
-  // -------------------------------------------------
-  // 4. CRUD Operations
-  // -------------------------------------------------
-  // ... Restante das funções CRUD permanecem iguais ...
-  
+  // --- CRUD ---
   const addClass = async (classRoom: ClassRoom) => {
     if (!currentUser) throw new Error('Você precisa estar logado para criar uma turma.');
     const { data, error } = await supabase.from('classes').insert([{ user_id: currentUser.id, name: classRoom.name, grade: classRoom.grade, subject: classRoom.subject, shift: classRoom.shift, students_count: classRoom.studentsCount || 0 }]).select().single();
@@ -291,7 +292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUser = async (user: User) => {
-    const { error } = await supabase.from('profiles').update({ name: user.name, role: user.role, plan: user.plan, status: user.status }).eq('id', user.id);
+    const { error } = await supabase.from('profiles').update({ name: user.name, role: user.role, plan: user.plan, status: user.status, theme_preference: user.themePreference }).eq('id', user.id);
     if (!error) {
       if (currentUser?.id === user.id) setCurrentUser(user);
       setUsers(prev => prev.map(u => (u.id === user.id ? user : u)));
