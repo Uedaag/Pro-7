@@ -177,7 +177,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[DATA] Erro planos:', err);
     }
 
-    // 🔹 3. Turmas (classes) – SEM depender de activities para não travar
+    // 🔹 3. Turmas (classes)
     let loadedClasses: any[] = [];
     try {
       const { data, error } = await supabase
@@ -199,7 +199,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             shift: c.shift,
             studentsCount: c.students_count,
             linkedPlanIds: c.linked_plan_ids || [],
-            generatedActivities: [], // preenchido depois (passo 6)
+            generatedActivities: [], // preenchido depois
           }))
         );
       }
@@ -233,7 +233,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[DATA] Erro comunidade:', err);
     }
 
-    // 🔹 5. Configurações do sistema (systemSettings)
+    // 🔹 5. Configurações do sistema
     try {
       const { data, error } = await supabase
         .from('configuracoes_sistema')
@@ -242,7 +242,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data && data.length > 0) {
         setSystemSettings(data as SystemSettings[]);
       } else {
-        // Defaults
         setSystemSettings([
           { plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false },
           { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true },
@@ -252,7 +251,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[DATA] Erro settings:', err);
     }
 
-    // 🔹 6. Atividades (activities) – Carregamento tardio
+    // 🔹 6. Atividades (activities) - Carregamento tardio
     try {
       if (loadedClasses.length > 0) {
         const classIds = loadedClasses.map((c) => c.id);
@@ -407,11 +406,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error) setEvents(prev => prev.filter(e => e.id !== id));
   };
 
+  // --- ADD PLAN CORRIGIDO ---
   const addPlan = async (plan: BimesterPlan) => {
-    if (!currentUser) return;
-    const { data, error } = await supabase.from('plans').insert([{ user_id: currentUser.id, class_name: plan.className, subject: plan.subject, bimester: plan.bimester, total_lessons: plan.totalLessons, theme: plan.theme, bncc_focus: plan.bnccFocus, lessons: JSON.stringify(plan.lessons) }]).select().single();
+    // Verifica sessão atual para garantir userId correto
+    const { data: { user } } = await supabase.auth.getUser();
+    const user_id = user?.id || currentUser?.id;
+
+    if (!user_id) throw new Error("Usuário não autenticado. Recarregue a página.");
+
+    const { data, error } = await supabase.from('plans').insert([{ 
+        user_id: user_id, 
+        class_name: plan.className, 
+        subject: plan.subject, 
+        bimester: plan.bimester, 
+        total_lessons: plan.totalLessons, 
+        theme: plan.theme, 
+        bncc_focus: plan.bnccFocus, 
+        lessons: JSON.stringify(plan.lessons) 
+    }]).select().single();
+    
     if (error) throw new Error(error.message);
-    if (data) setPlans(prev => [...prev, { ...plan, id: data.id, userId: currentUser.id, createdAt: data.created_at }]);
+    
+    if (data) {
+        setPlans(prev => [...prev, { ...plan, id: data.id, userId: user_id, createdAt: data.created_at }]);
+    }
   };
 
   const updatePlan = async (plan: BimesterPlan) => {
@@ -470,17 +488,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addActivity = async (activity: GeneratedActivity) => {
-    // Garante que estamos inserindo na tabela correta
-    const { data, error } = await supabase
-      .from('activities')
-      .insert([{ 
-          class_id: activity.classId, 
-          type: activity.type, 
-          title: activity.title, 
-          content: JSON.stringify(activity.content) 
-      }])
-      .select()
-      .single();
+    const { data, error } = await supabase.from('activities').insert([{ 
+        class_id: activity.classId, 
+        type: activity.type, 
+        title: activity.title, 
+        content: JSON.stringify(activity.content) 
+    }]).select().single();
 
     if (error) throw new Error(error.message);
 
@@ -496,7 +509,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       setClasses(prev => prev.map(c => {
           if (c.id === activity.classId) {
-              // Atualiza o estado local da turma com a nova atividade
               const existingActs = c.generatedActivities || [];
               return { ...c, generatedActivities: [...existingActs, newAct] };
           }

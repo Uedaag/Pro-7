@@ -254,7 +254,7 @@ export const ActivityGeneratorView: React.FC = () => {
     );
   };
 
-  // --- RENDERIZADOR PRINCIPAL ---
+  // --- RENDERIZADORES ---
 
   if (isLoading) {
     return (

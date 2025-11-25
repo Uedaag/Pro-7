@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Folder, Plus, Edit3, Trash2, Save, X, 
@@ -84,9 +83,9 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
       // Reset
       setGeneratedPlan(null);
       setActiveTab('library');
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Erro ao salvar no banco de dados.");
+      alert(`Erro ao salvar: ${error.message || "Erro desconhecido"}`);
     } finally {
       setIsSaving(false);
     }
