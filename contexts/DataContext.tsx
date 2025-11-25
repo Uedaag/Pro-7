@@ -41,6 +41,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            await fetchAllData(session.user.id);
         }
       } else {
+        // Garantir limpeza no logout via evento
         setCurrentUser(null);
         setEvents([]);
         setPlans([]);
@@ -234,15 +235,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!error && data.user) {
       // Regra automática para Admin: se o email conter 'admin', vira admin
-      // Isso é redundante com o Trigger do SQL, mas garante atualização imediata da UI
       const role = email.toLowerCase().includes('admin') ? 'admin' : 'teacher';
       
-      // UPSERT no perfil: garante que os dados estejam lá, seja via trigger ou client-side
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: data.user.id,
         email: email,
         name: name,
-        role: role, // Força o role aqui também para o frontend
+        role: role,
         plan: 'free',
         status: 'approved',
         joined_at: new Date().toISOString()
@@ -258,6 +257,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Limpeza explicita e imediata do estado para garantir atualização da UI
+    setCurrentUser(null);
+    setEvents([]);
+    setPlans([]);
+    setClasses([]);
+    setUsers([]);
   };
 
   // --- EVENTS ---

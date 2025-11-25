@@ -27,7 +27,7 @@ interface SidebarProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   user: User;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -41,10 +41,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout 
 }) => {
   
-  const handleLogoutClick = () => {
+  const handleLogoutClick = async () => {
     if (window.confirm("Tem certeza que deseja sair da sua conta?")) {
-      onLogout();
-      alert("Você saiu da sua conta.");
+      try {
+        await onLogout();
+      } catch (error) {
+        console.error("Erro ao sair:", error);
+      }
     }
   };
 
@@ -159,6 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Logout Button - Always Visible */}
         <button 
+          type="button"
           onClick={handleLogoutClick}
           className={`
             flex items-center justify-center gap-2 w-full p-3 rounded-xl 
