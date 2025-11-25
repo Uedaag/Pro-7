@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, Mail, Lock, User as UserIcon, Loader2, 
-  ArrowRight, AlertCircle, CheckCircle, Eye, EyeOff, BrainCircuit 
+  ArrowRight, AlertCircle, CheckCircle, Eye, EyeOff, BrainCircuit, WifiOff
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 
@@ -22,9 +22,15 @@ export const AuthForm: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  
+  // Timer de segurança para evitar travamento eterno
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,10 +38,21 @@ export const AuthForm: React.FC = () => {
     setError(null);
   };
 
+  const startSafetyTimer = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        setError("O servidor demorou a responder. Verifique sua internet e tente novamente.");
+      }
+    }, 15000); // 15 segundos de limite máximo
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    startSafetyTimer();
 
     try {
       if (!formData.email || !formData.password) {
@@ -46,8 +63,12 @@ export const AuthForm: React.FC = () => {
       if (error) throw error;
       
       // O redirecionamento acontece via AuthStateChange no App.tsx
+      // Mas limpamos o timer aqui
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
     } catch (err: any) {
-      setError(err.message || "Erro ao fazer login.");
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setError(err.message || "Erro ao fazer login. Verifique sua senha.");
       setIsLoading(false);
     }
   };
@@ -56,6 +77,7 @@ export const AuthForm: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    startSafetyTimer();
 
     try {
       if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
@@ -73,6 +95,8 @@ export const AuthForm: React.FC = () => {
       const { error } = await signUp(formData.email, formData.password, formData.name);
       if (error) throw error;
 
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      
       setSuccess("Conta criada com sucesso! Você já pode entrar.");
       setTimeout(() => {
          setMode('login');
@@ -81,6 +105,7 @@ export const AuthForm: React.FC = () => {
       }, 2000);
 
     } catch (err: any) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setError(err.message || "Erro ao criar conta.");
       setIsLoading(false);
     }
@@ -106,7 +131,8 @@ export const AuthForm: React.FC = () => {
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm font-bold rounded-xl flex items-center gap-3 animate-shake">
-              <AlertCircle size={18} /> {error}
+              {error.includes('servidor') ? <WifiOff size={18} /> : <AlertCircle size={18} />}
+              {error}
             </div>
           )}
           {success && (
@@ -206,6 +232,11 @@ export const AuthForm: React.FC = () => {
                   )
                 )}
               </button>
+              {isLoading && (
+                 <p className="text-[10px] text-center text-slate-400 mt-2 animate-pulse">
+                   Aguardando resposta do servidor...
+                 </p>
+              )}
             </div>
           </form>
 

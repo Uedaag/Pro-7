@@ -10,6 +10,24 @@ interface ExtendedDataContextType extends DataContextType {
 
 const DataContext = createContext<ExtendedDataContextType | undefined>(undefined);
 
+// Helper para timeout de promessas
+const timeoutPromise = (ms: number, promise: Promise<any>) => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("TIMEOUT"));
+    }, ms);
+    promise
+      .then(res => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+};
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -22,27 +40,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- AUTH LISTENER & DATA FETCHING ---
   useEffect(() => {
+    let mounted = true;
+
     const initData = async () => {
-      // Timeout de segurança: Se o Supabase não responder em 3s, libera o carregamento
-      const safetyTimeout = setTimeout(() => {
-        if (loading) {
-          console.warn("Supabase timeout - Forçando liberação da UI");
+      // Timeout absoluto de segurança para o carregamento inicial (8 segundos)
+      const safetyTimer = setTimeout(() => {
+        if (mounted && loading) {
+          console.warn("⚠️ Carregamento inicial excedeu o tempo limite. Liberando UI.");
           setLoading(false);
         }
-      }, 3000);
+      }, 8000);
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
+        if (error) throw error;
+
         if (session?.user) {
-          await fetchUserProfile(session.user.id);
-          await fetchAllData(session.user.id);
+          // Tenta buscar perfil com timeout curto (5s)
+          try {
+            await timeoutPromise(5000, fetchUserProfile(session.user.id));
+          } catch (e) {
+            console.warn("Perfil demorou a carregar, usando dados da sessão.");
+            // Fallback: Cria usuário temporário com dados da sessão para não travar
+            setCurrentUser({
+              id: session.user.id,
+              name: session.user.user_metadata?.name || 'Usuário',
+              email: session.user.email || '',
+              role: 'teacher',
+              plan: 'free',
+              status: 'approved',
+              joinedAt: new Date().toISOString()
+            });
+          }
+          
+          // Carrega dados em segundo plano sem bloquear
+          fetchAllData(session.user.id);
         }
       } catch (err) {
         console.error("Erro na inicialização:", err);
       } finally {
-        clearTimeout(safetyTimeout);
-        setLoading(false);
+        clearTimeout(safetyTimer);
+        if (mounted) setLoading(false);
       }
     };
 
@@ -51,20 +90,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         if (session.user.id !== currentUser?.id) {
-           await fetchUserProfile(session.user.id);
-           await fetchAllData(session.user.id);
+           // Se mudou o usuário, tenta buscar dados, mas não bloqueia UI se falhar
+           fetchUserProfile(session.user.id).catch(console.error);
+           fetchAllData(session.user.id).catch(console.error);
         }
       } else {
-        // Garantir limpeza no logout via evento
-        setCurrentUser(null);
-        setEvents([]);
-        setPlans([]);
-        setClasses([]);
-        setLoading(false);
+        if (mounted) {
+          setCurrentUser(null);
+          setEvents([]);
+          setPlans([]);
+          setClasses([]);
+          setLoading(false);
+        }
       }
     });
 
     return () => {
+      mounted = false;
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -77,7 +119,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      // Tenta buscar o perfil. Pode não existir imediatamente se o trigger tiver lag.
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -102,21 +143,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch (error) {
-      console.error("Erro ao buscar perfil:", error);
+      console.error("Erro ao buscar perfil (ignorado para evitar travamento):", error);
     }
   };
 
   const fetchAllData = async (userId: string) => {
+    // Executa buscas em paralelo para ser mais rápido
     try {
-      // 1. Events
-      const { data: eventsData } = await supabase.from('events').select('*').eq('user_id', userId);
-      if (eventsData) {
-        setEvents(eventsData.map(e => ({
+      const p1 = supabase.from('events').select('*').eq('user_id', userId);
+      const p2 = supabase.from('plans').select('*').eq('user_id', userId);
+      const p3 = supabase.from('classes').select(`*, activities(*)`).eq('user_id', userId);
+      const p4 = supabase.from('community').select('*').order('created_at', { ascending: false });
+
+      const [resEvents, resPlans, resClasses, resPosts] = await Promise.all([p1, p2, p3, p4]);
+
+      // Processa Eventos
+      if (resEvents.data) {
+        setEvents(resEvents.data.map(e => ({
           id: e.id,
           userId: e.user_id,
           title: e.title,
           type: e.type,
-          start: e.start, // O Supabase retorna string ISO
+          start: e.start,
           end: e.end,
           description: e.description,
           classId: e.class_id,
@@ -124,10 +172,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      // 2. Plans
-      const { data: plansData } = await supabase.from('plans').select('*').eq('user_id', userId);
-      if (plansData) {
-         setPlans(plansData.map(p => ({
+      // Processa Planos
+      if (resPlans.data) {
+         setPlans(resPlans.data.map(p => ({
             id: p.id,
             userId: p.user_id,
             className: p.class_name,
@@ -135,20 +182,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             bimester: p.bimester,
             totalLessons: p.total_lessons,
             theme: p.theme,
-            bncc_focus: p.bncc_focus,
+            bnccFocus: p.bncc_focus,
             lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons,
             createdAt: p.created_at
          })));
       }
 
-      // 3. Classes (Join with Activities)
-      const { data: classesData } = await supabase
-        .from('classes')
-        .select(`*, activities(*)`)
-        .eq('user_id', userId);
-      
-      if (classesData) {
-        setClasses(classesData.map(c => ({
+      // Processa Turmas
+      if (resClasses.data) {
+        setClasses(resClasses.data.map(c => ({
             id: c.id,
             userId: c.user_id,
             name: c.name,
@@ -169,10 +211,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      // 4. Community Posts (Public)
-      const { data: postsData } = await supabase.from('community').select('*').order('created_at', { ascending: false });
-      if (postsData) {
-        setPosts(postsData.map(p => ({
+      // Processa Posts
+      if (resPosts.data) {
+        setPosts(resPosts.data.map(p => ({
            id: p.id,
            userId: p.user_id,
            userName: p.user_name,
@@ -183,10 +224,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      // 5. Admin check to fetch all users
-      // Precisamos verificar o role do usuário ATUAL, não o estado anterior
+      // Check Admin para carregar usuários
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
-      
       if (profile?.role === 'admin') {
          const { data: allProfiles } = await supabase.from('profiles').select('*');
          if (allProfiles) {
@@ -207,34 +246,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
              })));
          }
       }
-
     } catch (e) {
-      console.error(e);
+      console.error("Erro parcial ao buscar dados:", e);
     }
   };
 
-  // --- AUTH ACTIONS ---
+  // --- AUTH ACTIONS (NON-BLOCKING) ---
 
   const signIn = async (email: string, pass: string) => {
+    // 1. Tenta autenticar
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: pass
     });
 
-    if (!error && data.user) {
-      // Se o perfil NÃO existir, cria aqui automaticamente
-      await supabase.from("profiles").upsert({
+    if (error) return { error };
+
+    if (data.user) {
+      // 2. Cria perfil em "Background" (Fire and Forget)
+      // NÃO usamos 'await' aqui para não travar o login se o banco estiver lento
+      (async () => {
+        try {
+          await supabase.from("profiles").upsert({
+            id: data.user.id,
+            email: email,
+            name: data.user.user_metadata?.name || "",
+            role: email.includes("admin") ? "admin" : "teacher",
+            status: "approved",
+            plan: "free",
+            joined_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+          // Após criar, tenta atualizar o estado local
+          await fetchUserProfile(data.user.id);
+        } catch (err) {
+          console.error("Erro background profile:", err);
+        }
+      })();
+
+      // 3. Define usuário local IMEDIATAMENTE para liberar a tela
+      setCurrentUser({
         id: data.user.id,
+        name: data.user.user_metadata?.name || email.split('@')[0],
         email: email,
-        name: data.user.user_metadata?.name || "",
         role: email.includes("admin") ? "admin" : "teacher",
-        status: "approved",
-        plan: "free",
-        joined_at: new Date().toISOString()
-      }, { onConflict: 'id' });
+        plan: 'free',
+        status: 'approved',
+        joinedAt: new Date().toISOString()
+      });
     }
 
-    return { error };
+    return { error: null };
   };
 
   const signUp = async (email: string, pass: string, name: string) => {
@@ -249,11 +310,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    if (!error && data.user) {
-      // Regra automática para Admin: se o email conter 'admin', vira admin
+    if (error) return { error };
+
+    if (data.user) {
       const role = email.toLowerCase().includes('admin') ? 'admin' : 'teacher';
       
-      const { error: profileError } = await supabase.from('profiles').upsert({
+      // Upsert em background
+      supabase.from('profiles').upsert({
         id: data.user.id,
         email: email,
         name: name,
@@ -263,28 +326,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         joined_at: new Date().toISOString()
       }, { onConflict: 'id' });
 
-      if (profileError) {
-         console.warn("Nota: Criação de perfil via cliente falhou (provavelmente já criado pelo Trigger):", profileError.message);
-      }
+      // Seta usuário local para feedback imediato
+      setCurrentUser({
+        id: data.user.id,
+        name: name,
+        email: email,
+        role: role as any,
+        plan: 'free',
+        status: 'approved',
+        joinedAt: new Date().toISOString()
+      });
     }
 
-    return { error };
+    return { error: null };
   };
 
   const signOut = async () => {
-    // Tenta deslogar no Supabase, mas limpa o estado LOCAL de qualquer forma
-    // Isso evita que a UI fique presa se houver erro de rede
+    // Limpeza imediata do estado local
+    setCurrentUser(null);
+    setEvents([]);
+    setPlans([]);
+    setClasses([]);
+    setUsers([]);
+    
+    // Tenta avisar o Supabase, mas não bloqueia se falhar
     try {
       await supabase.auth.signOut();
     } catch (error) {
-      console.error("Erro no logout Supabase:", error);
-    } finally {
-      setCurrentUser(null);
-      setEvents([]);
-      setPlans([]);
-      setClasses([]);
-      setUsers([]);
-      // localStorage.clear(); // Opcional: limpeza agressiva se necessário
+      console.warn("Logout offline/erro:", error);
     }
   };
 
@@ -292,27 +361,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addEvent = async (event: Omit<CalendarEvent, 'id'>) => {
     if (!currentUser) return;
-    const { data, error } = await supabase.from('events').insert([{
-        user_id: currentUser.id,
-        title: event.title,
-        type: event.type,
-        start: event.start,
-        end: event.end,
-        description: event.description,
-        class_name: event.className
-    }]).select().single();
+    try {
+      const { data, error } = await supabase.from('events').insert([{
+          user_id: currentUser.id,
+          title: event.title,
+          type: event.type,
+          start: event.start,
+          end: event.end,
+          description: event.description,
+          class_name: event.className
+      }]).select().single();
 
-    if (data) {
-        setEvents(prev => [...prev, {
-            id: data.id,
-            userId: data.user_id,
-            title: data.title,
-            type: data.type,
-            start: data.start,
-            end: data.end,
-            description: data.description,
-            className: data.class_name
-        }]);
+      if (error) throw error;
+
+      if (data) {
+          setEvents(prev => [...prev, {
+              id: data.id,
+              userId: data.user_id,
+              title: data.title,
+              type: data.type,
+              start: data.start,
+              end: data.end,
+              description: data.description,
+              className: data.class_name
+          }]);
+      }
+    } catch (e: any) {
+      throw new Error(e.message || "Erro ao salvar evento");
     }
   };
 
@@ -413,29 +488,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // --- CLASSES ---
 
   const addClass = async (classRoom: ClassRoom) => {
-    if (!currentUser) return;
-    const { data, error } = await supabase.from('classes').insert([{
+    if (!currentUser) throw new Error("Você precisa estar logado para criar uma turma.");
+
+    // Timeout de 10s para criar turma
+    const promise = supabase.from('classes').insert([{
         user_id: currentUser.id,
         name: classRoom.name,
         grade: classRoom.grade,
         subject: classRoom.subject,
         shift: classRoom.shift,
-        students_count: classRoom.studentsCount
+        students_count: classRoom.studentsCount || 0
     }]).select().single();
 
-    if (data) {
-        const newClass: ClassRoom = {
-            id: data.id,
-            userId: data.user_id,
-            name: data.name,
-            grade: data.grade,
-            subject: data.subject,
-            shift: data.shift,
-            studentsCount: data.students_count,
-            linkedPlanIds: [],
-            generatedActivities: []
-        };
-        setClasses(prev => [...prev, newClass]);
+    try {
+      // @ts-ignore
+      const { data, error } = await timeoutPromise(10000, promise);
+      
+      if (error) throw error;
+
+      if (data) {
+          const newClass: ClassRoom = {
+              id: data.id,
+              userId: data.user_id,
+              name: data.name,
+              grade: data.grade,
+              subject: data.subject,
+              shift: data.shift,
+              studentsCount: data.students_count,
+              linkedPlanIds: [],
+              generatedActivities: []
+          };
+          setClasses(prev => [...prev, newClass]);
+      }
+    } catch (err: any) {
+       console.error("Erro addClass:", err);
+       throw new Error("Não foi possível criar a turma. Verifique sua conexão.");
     }
   };
 

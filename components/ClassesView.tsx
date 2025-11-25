@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Users, Plus, Trash2, ChevronLeft, Calendar as CalendarIcon,
-  X, Eye, Printer, Presentation, ChevronRight, Image as ImageIcon, BookOpen, FileText
+  X, Eye, Printer, Presentation, ChevronRight, Image as ImageIcon, BookOpen, FileText, Loader2
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { ClassRoom, View, GeneratedActivity, ActivityContent } from '../types';
@@ -13,12 +13,16 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [selectedClass, setSelectedClass] = useState<ClassRoom | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = new FormData(e.target as HTMLFormElement);
+    setIsSubmitting(true);
     
-    // O ID e userId são gerados/atribuídos no contexto
+    // Captura segura dos dados do formulário
+    const form = e.currentTarget as HTMLFormElement;
+    const formData = new FormData(form);
+    
     const newClass: any = {
       name: formData.get('name') as string,
       grade: formData.get('grade') as string,
@@ -27,8 +31,19 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
       studentsCount: 0
     };
 
-    await addClass(newClass);
-    setIsCreateModalOpen(false);
+    try {
+      if (!newClass.name || !newClass.grade || !newClass.subject) {
+        throw new Error("Preencha todos os campos obrigatórios.");
+      }
+      
+      await addClass(newClass);
+      setIsCreateModalOpen(false);
+      form.reset();
+    } catch (error: any) {
+      alert("Erro ao criar turma: " + (error.message || "Verifique se você tem permissão ou se o banco de dados está acessível."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDeleteClass = async (id: string) => {
@@ -129,7 +144,14 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
 
               <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100">
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button>
-                <button type="submit" className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow-lg shadow-purple-500/20">Criar Turma</button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow-lg shadow-purple-500/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : null}
+                  {isSubmitting ? "Criando..." : "Criar Turma"}
+                </button>
               </div>
             </form>
           </div>
