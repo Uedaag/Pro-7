@@ -31,7 +31,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [systemSettings, setSystemSettings] = useState<SystemSettings[]>([]);
 
   // -------------------------------------------------
-  // 1. Autenticação e Sessão (Gerencia currentUser)
+  // 1. Autenticação e Sessão
   // -------------------------------------------------
   const handleSessionChange = async (session: Session | null) => {
     if (!session?.user) {
@@ -84,7 +84,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(baseUser);
       }
     } catch (e) {
-      console.warn("Erro ao buscar perfil, usando base:", e);
       setCurrentUser(baseUser);
     } finally {
       setLoading(false);
@@ -118,78 +117,212 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser?.id]);
 
   const fetchAllData = async (userId: string) => {
+    if (!currentUser) return;
     console.log('[DATA] Carregando dados para userId:', userId);
 
-    // 1. Eventos (Agenda)
+    // 🔹 1. Agenda (events)
     try {
-      const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
       if (data) {
-        setEvents(data.map(e => ({
-          id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
-        })));
+        setEvents(
+          data.map((e: any) => ({
+            id: e.id,
+            userId: e.user_id,
+            title: e.title,
+            type: e.type,
+            start: e.start,
+            end: e.end,
+            description: e.description,
+            classId: e.class_id,
+            className: e.class_name,
+          }))
+        );
       }
-    } catch (e) { console.error('[DATA] Erro events:', e); }
+    } catch (err) {
+      console.error('[DATA] Erro agenda:', err);
+    }
 
-    // 2. Planos de Aula
+    // 🔹 2. Planos de aula (plans)
     try {
-      const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId);
+      const { data, error } = await supabase
+        .from('plans')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
       if (data) {
-        setPlans(data.map(p => ({
-          id: p.id, userId: p.user_id, className: p.class_name, subject: p.subject, bimester: p.bimester, totalLessons: p.total_lessons, theme: p.theme, bnccFocus: p.bncc_focus, lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons, createdAt: p.created_at
-        })));
+        setPlans(
+          data.map((p: any) => ({
+            id: p.id,
+            userId: p.user_id,
+            className: p.class_name,
+            subject: p.subject,
+            bimester: p.bimester,
+            totalLessons: p.total_lessons,
+            theme: p.theme,
+            bnccFocus: p.bncc_focus,
+            lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons,
+            createdAt: p.created_at,
+          }))
+        );
       }
-    } catch (e) { console.error('[DATA] Erro plans:', e); }
+    } catch (err) {
+      console.error('[DATA] Erro planos:', err);
+    }
 
-    // 3. Turmas (Classes) - Com fallback se activities falhar
+    // 🔹 3. Turmas (classes) – SEM depender de activities para não travar
+    let loadedClasses: any[] = [];
     try {
-      let res = await supabase.from('classes').select('*, activities(*)').eq('user_id', userId);
-      
-      // Se falhar no join (ex: tabela activities não existe), tenta pegar só as classes
-      if (res.error) {
-         console.warn('[DATA] Falha ao buscar activities vinculadas, buscando apenas classes.', res.error.message);
-         res = await supabase.from('classes').select('*').eq('user_id', userId);
-      }
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('user_id', userId);
 
-      if (res.data) {
-        setClasses(res.data.map(c => ({
-          id: c.id, userId: c.user_id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, studentsCount: c.students_count, linkedPlanIds: c.linked_plan_ids || [],
-          generatedActivities: c.activities?.map((a: any) => ({
-            id: a.id, classId: a.class_id, type: a.type, title: a.title, content: typeof a.content === 'string' ? JSON.parse(a.content) : a.content, createdAt: a.created_at, relatedLessonIds: a.related_lesson_ids || []
-          })) || []
-        })));
-      }
-    } catch (e) { console.error('[DATA] Erro classes:', e); }
+      if (error) throw error;
 
-    // 4. Comunidade (Posts)
-    try {
-      const { data, error } = await supabase.from('community').select('*').order('created_at', { ascending: false });
       if (data) {
-        setPosts(data.map(p => ({
-          id: p.id, userId: p.user_id, userName: p.user_name, content: p.content, likes: p.likes, createdAt: p.created_at, isPinned: p.is_pinned
-        })));
+        loadedClasses = data;
+        setClasses(
+          data.map((c: any) => ({
+            id: c.id,
+            userId: c.user_id,
+            name: c.name,
+            grade: c.grade,
+            subject: c.subject,
+            shift: c.shift,
+            studentsCount: c.students_count,
+            linkedPlanIds: c.linked_plan_ids || [],
+            generatedActivities: [], // preenchido depois (passo 6)
+          }))
+        );
       }
-    } catch (e) { console.error('[DATA] Erro posts:', e); }
+    } catch (err) {
+      console.error('[DATA] Erro turmas:', err);
+    }
 
-    // 5. Configurações
+    // 🔹 4. Comunidade (posts)
     try {
-      const { data, error } = await supabase.from('configuracoes_sistema').select('*');
+      const { data, error } = await supabase
+        .from('community')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setPosts(
+          data.map((p: any) => ({
+            id: p.id,
+            userId: p.user_id,
+            userName: p.user_name,
+            content: p.content,
+            likes: p.likes,
+            createdAt: p.created_at,
+            isPinned: p.is_pinned,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('[DATA] Erro comunidade:', err);
+    }
+
+    // 🔹 5. Configurações do sistema (systemSettings)
+    try {
+      const { data, error } = await supabase
+        .from('configuracoes_sistema')
+        .select('*');
+
       if (data && data.length > 0) {
         setSystemSettings(data as SystemSettings[]);
       } else {
-        setSystemSettings([{ plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false }, { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true }]);
+        // Defaults
+        setSystemSettings([
+          { plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false },
+          { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true },
+        ]);
       }
-    } catch (e) { console.error('[DATA] Erro settings:', e); }
+    } catch (err) {
+      console.error('[DATA] Erro settings:', err);
+    }
 
-    // 6. Admin - Usuários
-    if (currentUser?.role === 'admin') {
+    // 🔹 6. Atividades (activities) – Carregamento tardio
+    try {
+      if (loadedClasses.length > 0) {
+        const classIds = loadedClasses.map((c) => c.id);
+
+        const { data, error } = await supabase
+          .from('activities')
+          .select('*')
+          .in('class_id', classIds);
+
+        if (error) throw error;
+
+        if (data) {
+          const activitiesByClass: Record<string, GeneratedActivity[]> = {};
+
+          data.forEach((a: any) => {
+            const content = typeof a.content === 'string' ? JSON.parse(a.content) : a.content;
+            const act: GeneratedActivity = {
+              id: a.id,
+              classId: a.class_id,
+              type: a.type,
+              title: a.title,
+              content,
+              createdAt: a.created_at,
+              relatedLessonIds: a.related_lesson_ids || [],
+            };
+
+            if (!activitiesByClass[a.class_id]) {
+              activitiesByClass[a.class_id] = [];
+            }
+            activitiesByClass[a.class_id].push(act);
+          });
+
+          setClasses((prev) =>
+            prev.map((c) => ({
+              ...c,
+              generatedActivities: activitiesByClass[c.id] || [],
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[DATA] Erro atividades:', err);
+    }
+
+    // 🔹 7. Admin Users
+    if (currentUser.role === 'admin') {
       try {
         const { data } = await supabase.from('profiles').select('*');
         if (data) {
-          setUsers(data.map(u => ({
-            id: u.id, name: u.name, email: u.email, role: u.role, plan: u.plan, status: u.status, joinedAt: u.joined_at, themePreference: u.theme_preference, avatarUrl: u.avatar_url, phone: u.phone, bio: u.bio, education: u.education, expertise: u.expertise
-          })));
+          setUsers(
+            data.map((u: any) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+              plan: u.plan,
+              status: u.status,
+              joinedAt: u.joined_at,
+              themePreference: u.theme_preference,
+              avatarUrl: u.avatar_url,
+              phone: u.phone,
+              bio: u.bio,
+              education: u.education,
+              expertise: u.expertise,
+            }))
+          );
         }
-      } catch (e) { console.error('[DATA] Erro users:', e); }
+      } catch (err) {
+        console.error('[DATA] Erro admin users:', err);
+      }
     }
   };
 
@@ -337,11 +470,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addActivity = async (activity: GeneratedActivity) => {
-    const { data, error } = await supabase.from('activities').insert([{ class_id: activity.classId, type: activity.type, title: activity.title, content: JSON.stringify(activity.content) }]).select().single();
+    // Garante que estamos inserindo na tabela correta
+    const { data, error } = await supabase
+      .from('activities')
+      .insert([{ 
+          class_id: activity.classId, 
+          type: activity.type, 
+          title: activity.title, 
+          content: JSON.stringify(activity.content) 
+      }])
+      .select()
+      .single();
+
     if (error) throw new Error(error.message);
+
     if (data) {
-      const newAct: GeneratedActivity = { id: data.id, classId: data.class_id, type: data.type, title: data.title, content: typeof data.content === 'string' ? JSON.parse(data.content) : data.content, createdAt: data.created_at };
-      setClasses(prev => prev.map(c => (c.id === activity.classId ? { ...c, generatedActivities: [...c.generatedActivities, newAct] } : c)));
+      const newAct: GeneratedActivity = { 
+          id: data.id, 
+          classId: data.class_id, 
+          type: data.type, 
+          title: data.title, 
+          content: typeof data.content === 'string' ? JSON.parse(data.content) : data.content, 
+          createdAt: data.created_at 
+      };
+      
+      setClasses(prev => prev.map(c => {
+          if (c.id === activity.classId) {
+              // Atualiza o estado local da turma com a nova atividade
+              const existingActs = c.generatedActivities || [];
+              return { ...c, generatedActivities: [...existingActs, newAct] };
+          }
+          return c;
+      }));
     }
   };
 

@@ -5,15 +5,32 @@ import { EscapeRoomData, LessonRow, ActivityContent, Slide, Question, Presentati
 let aiInstance: GoogleGenAI | null = null;
 
 const getApiKey = (): string => {
+  const keys = [
+    'VITE_API_KEY', 
+    'NEXT_PUBLIC_API_KEY', 
+    'REACT_APP_API_KEY',
+    'VITE_GOOGLE_API_KEY',
+    'NEXT_PUBLIC_GOOGLE_API_KEY'
+  ];
+
+  // Verifica import.meta.env (Vite)
   // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_API_KEY;
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    for (const key of keys) {
+      // @ts-ignore
+      if (import.meta.env[key]) return import.meta.env[key];
+    }
   }
+
+  // Verifica process.env (Create React App / Next.js)
   // @ts-ignore
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    return process.env.API_KEY;
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.API_KEY) return process.env.API_KEY; // Padrão do backend/docker
+    for (const key of keys) {
+      if (process.env[key]) return process.env[key];
+    }
   }
+  
   return '';
 };
 
