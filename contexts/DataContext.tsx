@@ -23,7 +23,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // TRAVA ANTI-LOOP: Impede re-processamento do mesmo usuário
   const currentUserIdRef = useRef<string | null>(null);
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -33,7 +32,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [posts, setPosts] = useState<Post[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSettings[]>([]);
 
-  // --- AUTHENTICATION ---
   const handleSessionChange = async (session: Session | null) => {
     if (!session?.user) {
       if (currentUserIdRef.current !== null) {
@@ -131,7 +129,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // --- DATA FETCHING ---
   const fetchAllData = async (userId: string) => {
     try {
       const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
@@ -213,7 +210,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshData = async () => { if (currentUser) await fetchAllData(currentUser.id); };
 
-  // --- ACTIONS ---
   const signIn = async (email: string, pass: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     return { error };
@@ -228,7 +224,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-      setLoading(true);
       setCurrentUser(null);
       setEvents([]);
       setPlans([]);
@@ -238,13 +233,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUserIdRef.current = null;
       try {
         await supabase.auth.signOut();
-        setLoading(false);
       } catch (error) {
         console.error("Erro silencioso no logout:", error);
-        setLoading(false);
       }
   };
 
+  const addPlan = async (plan: BimesterPlan) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const user_id = user?.id || currentUser?.id;
+    if (!user_id) throw new Error("Usuário não autenticado.");
+
+    // Envia o array de lições diretamente (o Supabase converte para JSONB)
+    // NÃO use JSON.stringify aqui se a coluna for jsonb
+    const { data, error } = await supabase.from('plans').insert([{
+        user_id: user_id,
+        class_name: plan.className,
+        subject: plan.subject,
+        bimester: plan.bimester,
+        total_lessons: plan.totalLessons,
+        theme: plan.theme,
+        bncc_focus: plan.bnccFocus,
+        lessons: plan.lessons 
+    }]).select().single();
+    
+    if (error) throw new Error(error.message);
+    if (data) setPlans(prev => [...prev, { ...plan, id: data.id, userId: user_id, createdAt: data.created_at }]);
+  };
+
+  const deletePlan = async (id: string) => {
+    await supabase.from('plans').delete().eq('id', id);
+    setPlans(prev=>prev.filter(p=>p.id!==id));
+  };
+
+  // --- OUTRAS FUNÇÕES CRUD (Mantidas) ---
   const addClass = async (c: any) => {
     const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id}]).select().single();
     if(error) throw new Error(error.message);
@@ -271,33 +292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEvents(prev=>prev.filter(e=>e.id!==id));
   };
 
-  const addPlan = async (plan: BimesterPlan) => {
-    // Garante ID do usuário
-    const { data: { user } } = await supabase.auth.getUser();
-    const user_id = user?.id || currentUser?.id;
-    if (!user_id) throw new Error("Usuário não autenticado.");
-
-    // Envia lessons direto como array (para coluna JSONB)
-    const { data, error } = await supabase.from('plans').insert([{
-        user_id: user_id,
-        class_name: plan.className,
-        subject: plan.subject,
-        bimester: plan.bimester,
-        total_lessons: plan.totalLessons,
-        theme: plan.theme,
-        bncc_focus: plan.bnccFocus,
-        lessons: plan.lessons 
-    }]).select().single();
-    
-    if (error) throw new Error(error.message);
-    if (data) setPlans(prev => [...prev, { ...plan, id: data.id, userId: user_id, createdAt: data.created_at }]);
-  };
-
   const updatePlan = async (p: any) => {};
-  const deletePlan = async (id: string) => {
-    await supabase.from('plans').delete().eq('id', id);
-    setPlans(prev=>prev.filter(p=>p.id!==id));
-  };
 
   const addPost = async (c: string, u: User) => {
     const { data, error } = await supabase.from('community').insert([{user_id: u.id, user_name: u.name, content: c}]).select().single();
