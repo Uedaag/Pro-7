@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { useData } from '../contexts/DataContext';
+import { supabase } from '../lib/supabaseClient';
 import { 
   User as UserIcon, Mail, Phone, Award, Briefcase, 
-  Moon, Sun, Camera, Save, CheckCircle, Plus, Trash2
+  Moon, Sun, Camera, Save, CheckCircle, Plus, Trash2, Loader2
 } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
@@ -13,6 +14,7 @@ export const ProfileView: React.FC = () => {
   const [formData, setFormData] = useState<Partial<User>>({});
   const [newEducation, setNewEducation] = useState('');
   const [newExpertise, setNewExpertise] = useState('');
+  const [uploading, setUploading] = useState(false);
   
   const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
 
@@ -78,18 +80,49 @@ export const ProfileView: React.FC = () => {
         setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
         setTimeout(() => setMessage(null), 3000);
     } catch (e) {
+        console.error(e);
         setMessage({ type: 'error', text: 'Erro ao atualizar.' });
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, avatarUrl: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+  // Função corrigida para salvar no Storage e persistir no Banco
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true);
+      if (!e.target.files || e.target.files.length === 0) {
+        throw new Error('Selecione uma imagem para upload.');
+      }
+
+      const file = e.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${currentUser?.id}/${fileName}`;
+
+      // 1. Upload para o Supabase Storage (Bucket 'avatars')
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // 2. Pegar URL Pública
+      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
+
+      // 3. Atualizar estado local para visualização imediata
+      setFormData(prev => ({ ...prev, avatarUrl: publicUrl }));
+      
+      // Opcional: Avisar que precisa clicar em salvar para persistir definitivamente ou salvar direto
+      // Aqui vamos apenas setar o state e deixar o usuário clicar em salvar para confirmar tudo junto
+      setMessage({ type: 'success', text: 'Foto carregada! Clique em Salvar Alterações.' });
+
+    } catch (error: any) {
+      console.error('Erro no upload:', error);
+      setMessage({ type: 'error', text: 'Erro ao fazer upload da imagem.' });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -111,8 +144,10 @@ export const ProfileView: React.FC = () => {
         <div className="space-y-6">
           <div className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm text-center">
             <div className="relative w-32 h-32 mx-auto mb-4">
-              <div className="w-32 h-32 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden border-4 border-white dark:border-slate-700 shadow-lg">
-                {formData.avatarUrl ? (
+              <div className="w-32 h-32 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden border-4 border-white dark:border-slate-700 shadow-lg relative flex items-center justify-center">
+                {uploading ? (
+                   <Loader2 className="animate-spin text-cyan-600" size={32} />
+                ) : formData.avatarUrl ? (
                   <img src={formData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-300 dark:text-slate-600">
@@ -122,7 +157,13 @@ export const ProfileView: React.FC = () => {
               </div>
               <label className="absolute bottom-0 right-0 p-2 bg-cyan-600 text-white rounded-full cursor-pointer hover:bg-cyan-500 transition-colors shadow-md">
                 <Camera size={16} />
-                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleImageUpload}
+                  disabled={uploading}
+                />
               </label>
             </div>
             <h2 className="text-xl font-bold text-slate-800 dark:text-white">{formData.name}</h2>

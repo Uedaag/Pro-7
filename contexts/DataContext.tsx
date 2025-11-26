@@ -244,23 +244,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-      // 1. Limpa estado imediatamente para dar feedback visual instantâneo (UX)
-      setLoading(true); // Opcional, para mostrar loader brevemente
+      setLoading(true);
       setCurrentUser(null);
       setEvents([]);
       setPlans([]);
       setClasses([]);
       setUsers([]);
       setPosts([]);
-      
-      // 2. Reseta a referência para permitir login futuro
       currentUserIdRef.current = null;
-      
-      // 3. Chama o logout real no backend
       try {
         await supabase.auth.signOut();
         setLoading(false);
-        // Redirecionamento é automático pois currentUser virou null e App.tsx renderiza AuthForm
       } catch (error) {
         console.error("Erro silencioso no logout:", error);
         setLoading(false);
@@ -355,9 +349,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUser = async (u: User) => {
      const { error } = await supabase.from('profiles').update({
-         name: u.name, bio: u.bio, phone: u.phone, theme_preference: u.themePreference
+         name: u.name, 
+         bio: u.bio, 
+         phone: u.phone, 
+         theme_preference: u.themePreference,
+         avatar_url: u.avatarUrl,
+         education: u.education,
+         expertise: u.expertise
      }).eq('id', u.id);
+     
      if(!error) setCurrentUser(u);
+     else throw new Error(error.message);
   };
   const updateUsersBatch = async (us: User[]) => {
       for (const u of us) {
