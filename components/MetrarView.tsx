@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Folder, Plus, Edit3, Trash2, Save, X, 
@@ -264,8 +265,16 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                 <div key={plan.id} onClick={() => setSelectedStoredPlan(plan)} className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-700 transition-all cursor-pointer group relative">
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 rounded-xl group-hover:bg-cyan-600 group-hover:text-white transition-colors"><List size={24} /></div>
-                    <div className="flex gap-2">
-                        <button onClick={(e) => openLinkModal(plan.id, e)} className="p-2 text-slate-300 hover:text-cyan-500 transition-colors rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-900/20" title="Vincular a Turma"><LinkIcon size={18} /></button>
+                    <div className="flex gap-2 items-center">
+                        {/* BOTÃO VINCULAR TURMA ATUALIZADO PARA SER EXPLÍCITO */}
+                        <button 
+                            onClick={(e) => openLinkModal(plan.id, e)} 
+                            className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-cyan-200 dark:border-cyan-800 text-cyan-600 dark:text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-colors shadow-sm"
+                            title="Vincular este plano a uma turma"
+                        >
+                            <LinkIcon size={14} /> Vincular Turma
+                        </button>
+                        
                         <button onClick={(e) => handleDelete(plan.id, e)} className="p-2 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={18} /></button>
                     </div>
                   </div>
@@ -289,27 +298,38 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
 
       {/* Modal de Vinculação */}
       {isLinkModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-              <div className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
-                  <button onClick={() => setIsLinkModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
-                  <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Vincular à Turma</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Selecione a turma para associar este plano de aula. Isso permitirá gerar atividades baseadas neste conteúdo.</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-scale-in">
+                  <button onClick={() => setIsLinkModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                  
+                  <div className="mb-6">
+                    <div className="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded-xl flex items-center justify-center mb-4">
+                        <LinkIcon size={24} />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Vincular à Turma</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Selecione a turma para associar este plano de aula. Isso permitirá gerar atividades baseadas neste conteúdo.
+                    </p>
+                  </div>
                   
                   {classes.length > 0 ? (
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                      <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
                           {classes.map(c => (
                               <button 
                                 key={c.id} 
                                 onClick={() => handleLinkClass(c.id)}
-                                className="w-full text-left p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-all"
+                                className="w-full text-left p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-all group"
                               >
-                                  <h4 className="font-bold text-slate-800 dark:text-white">{c.name}</h4>
+                                  <h4 className="font-bold text-slate-800 dark:text-white group-hover:text-cyan-700 dark:group-hover:text-cyan-300">{c.name}</h4>
                                   <p className="text-xs text-slate-500">{c.grade} • {c.subject}</p>
                               </button>
                           ))}
                       </div>
                   ) : (
-                      <p className="text-center text-slate-400">Nenhuma turma cadastrada.</p>
+                      <div className="text-center py-6 bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                          <p className="text-slate-400 text-sm mb-2">Nenhuma turma cadastrada.</p>
+                          <a href="#" onClick={(e) => { e.preventDefault(); alert("Vá para a aba Turmas para cadastrar uma nova."); }} className="text-cyan-600 font-bold text-xs hover:underline">Cadastrar Turma</a>
+                      </div>
                   )}
               </div>
           </div>
