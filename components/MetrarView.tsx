@@ -80,11 +80,11 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
       await addPlan(newPlan);
       alert("Plano salvo com sucesso na sua biblioteca!");
       
-      // Reset
+      // Reset e vai para a biblioteca
       setGeneratedPlan(null);
       setActiveTab('library');
     } catch (error: any) {
-      console.error(error);
+      console.error("Erro detalhado:", error);
       alert(`Erro ao salvar no banco de dados: ${error.message || error}`);
     } finally {
       setIsSaving(false);

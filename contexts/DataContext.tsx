@@ -32,6 +32,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [posts, setPosts] = useState<Post[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSettings[]>([]);
 
+  // --- AUTHENTICATION ---
   const handleSessionChange = async (session: Session | null) => {
     if (!session?.user) {
       if (currentUserIdRef.current !== null) {
@@ -71,13 +72,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setCurrentUser(baseUser);
 
-      const { data: profile, error } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      if (profile && !error) {
+      if (profile) {
         const fullUser = {
           ...baseUser,
           name: profile.name || baseUser.name,
@@ -105,7 +106,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
-
     const init = async () => {
       try {
         const { data } = await supabase.auth.getSession();
@@ -114,15 +114,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (mounted) setLoading(false);
       }
     };
-
     init();
-
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (mounted && (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION')) {
          handleSessionChange(session);
       }
     });
-
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
@@ -130,15 +127,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const fetchAllData = async (userId: string) => {
-    try {
-      const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
-      if (!error && data) {
-        setEvents(data.map((e: any) => ({
-          id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
-        })));
-      }
-    } catch (err) { console.error('Erro Agenda:', err); }
-
+    // 1. Planos (Prioridade para sua solicitação)
     try {
       const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId);
       if (!error && data) {
@@ -150,6 +139,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) { console.error('Erro Planos:', err); }
 
+    // Outros dados (Agenda, Turmas, etc)
+    try {
+      const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
+      if (!error && data) {
+        setEvents(data.map((e: any) => ({
+          id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
+        })));
+      }
+    } catch (err) {}
+
     let loadedClasses: any[] = [];
     try {
       const { data, error } = await supabase.from('classes').select('*').eq('user_id', userId);
@@ -159,7 +158,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: c.id, userId: c.user_id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, studentsCount: c.students_count, linkedPlanIds: c.linked_plan_ids || [], generatedActivities: []
         })));
       }
-    } catch (err) { console.error('Erro Turmas:', err); }
+    } catch (err) {}
 
     try {
       const { data, error } = await supabase.from('community').select('*').order('created_at', { ascending: false });
@@ -179,7 +178,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (loadedClasses.length > 0) {
         const classIds = loadedClasses.map((c) => c.id);
         const { data, error } = await supabase.from('activities').select('*').in('class_id', classIds);
-        
         if (!error && data) {
           const activitiesByClass: Record<string, GeneratedActivity[]> = {};
           data.forEach((a: any) => {
@@ -193,7 +191,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setClasses((prev) => prev.map((c) => ({ ...c, generatedActivities: activitiesByClass[c.id] || [] })));
         }
       }
-    } catch (err) { console.error('Erro Atividades:', err); }
+    } catch (err) {}
 
     try {
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
@@ -231,21 +229,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsers([]);
       setPosts([]);
       currentUserIdRef.current = null;
-      try {
-        await supabase.auth.signOut();
-      } catch (error) {
-        console.error("Erro silencioso no logout:", error);
-      }
+      try { await supabase.auth.signOut(); } catch (error) {}
   };
 
+  // --- CORREÇÃO PRINCIPAL: SALVAR PLANO ---
   const addPlan = async (plan: BimesterPlan) => {
     const { data: { user } } = await supabase.auth.getUser();
     const user_id = user?.id || currentUser?.id;
-    if (!user_id) throw new Error("Usuário não autenticado.");
+    
+    if (!user_id) throw new Error("Usuário não autenticado. Faça login novamente.");
 
-    // Envia o array de lições diretamente (o Supabase converte para JSONB)
-    // NÃO use JSON.stringify aqui se a coluna for jsonb
-    const { data, error } = await supabase.from('plans').insert([{
+    // Mapeia para o formato do banco de dados
+    const dbPayload = {
         user_id: user_id,
         class_name: plan.className,
         subject: plan.subject,
@@ -253,11 +248,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         total_lessons: plan.totalLessons,
         theme: plan.theme,
         bncc_focus: plan.bnccFocus,
-        lessons: plan.lessons 
-    }]).select().single();
+        lessons: plan.lessons // O Supabase converte array pra JSONB automaticamente
+    };
+
+    const { data, error } = await supabase.from('plans').insert([dbPayload]).select().single();
     
-    if (error) throw new Error(error.message);
-    if (data) setPlans(prev => [...prev, { ...plan, id: data.id, userId: user_id, createdAt: data.created_at }]);
+    if (error) {
+        console.error("Supabase error adding plan:", error);
+        throw new Error(error.message || "Erro ao salvar plano no banco.");
+    }
+
+    if (data) {
+        setPlans(prev => [...prev, { 
+            ...plan, 
+            id: data.id, 
+            userId: user_id, 
+            createdAt: data.created_at 
+        }]);
+    }
   };
 
   const deletePlan = async (id: string) => {
@@ -265,7 +273,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPlans(prev=>prev.filter(p=>p.id!==id));
   };
 
-  // --- OUTRAS FUNÇÕES CRUD (Mantidas) ---
+  // --- CRUD Genérico ---
   const addClass = async (c: any) => {
     const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id}]).select().single();
     if(error) throw new Error(error.message);
@@ -319,9 +327,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: act.title,
         content: act.content
     }]).select().single();
-
     if (error) throw new Error(error.message);
-    
     if (data) {
         const newAct = { ...act, id: data.id, createdAt: data.created_at };
         setClasses(prev => prev.map(c => c.id === act.classId ? {...c, generatedActivities: [...c.generatedActivities, newAct]} : c));
@@ -334,7 +340,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          avatar_url: u.avatarUrl, education: u.education, expertise: u.expertise
      }).eq('id', u.id);
      if(!error) setCurrentUser(u);
-     else throw new Error(error.message);
   };
   const updateUsersBatch = async (us: User[]) => {
       for (const u of us) {
