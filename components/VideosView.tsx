@@ -70,7 +70,7 @@ export const VideosView: React.FC = () => {
   };
 
   const openEditModal = (video: VideoItem, e: React.MouseEvent) => {
-    e.stopPropagation(); // Evita abrir o player ao clicar no editar
+    e.stopPropagation(); // Evita abrir o player
     setEditingVideo(video);
     setFormTitle(video.title);
     setFormUrl(video.url);
@@ -206,22 +206,22 @@ export const VideosView: React.FC = () => {
               className="bg-white dark:bg-[#0f172a] rounded-2xl overflow-hidden shadow-sm border border-slate-200 dark:border-white/5 hover:shadow-xl hover:border-blue-200 dark:hover:border-blue-900/30 transition-all group cursor-pointer flex flex-col relative"
               onClick={() => openPlayer(video)}
             >
-              {/* Botões de Admin (Overlay com Lápis e Lixeira) */}
+              {/* Botões de Admin (Overlay) */}
               {isAdmin && (
                 <div className="absolute top-2 right-2 z-20 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 
                     onClick={(e) => openEditModal(video, e)}
-                    className="p-2 bg-white/90 text-blue-600 rounded-lg shadow-md hover:bg-blue-600 hover:text-white transition-colors"
-                    title="Editar Vídeo e Categoria"
+                    className="p-2 bg-white/90 text-blue-600 rounded-lg shadow hover:bg-blue-600 hover:text-white transition-colors"
+                    title="Editar"
                   >
-                    <Edit3 size={18} />
+                    <Edit3 size={16} />
                   </button>
                   <button 
                     onClick={(e) => handleDelete(video.id, e)}
-                    className="p-2 bg-white/90 text-red-600 rounded-lg shadow-md hover:bg-red-600 hover:text-white transition-colors"
-                    title="Excluir Vídeo"
+                    className="p-2 bg-white/90 text-red-600 rounded-lg shadow hover:bg-red-600 hover:text-white transition-colors"
+                    title="Excluir"
                   >
-                    <Trash2 size={18} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               )}
@@ -324,7 +324,7 @@ export const VideosView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Player (Corrigido erro 153) */}
+      {/* Modal Player */}
       {isPlayModalOpen && selectedVideoToPlay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in">
           <div className="w-full max-w-5xl animate-scale-in relative">

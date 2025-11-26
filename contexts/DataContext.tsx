@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   CalendarEvent,
@@ -37,7 +38,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleSessionChange = async (session: Session | null) => {
     // Cenário 1: Sem sessão
     if (!session?.user) {
+      // Se ainda temos um ID na referência, significa que o logout aconteceu via evento externo ou token expirado
       if (currentUserIdRef.current !== null) {
+        console.log('[AUTH] Sessão encerrada, limpando dados.');
         currentUserIdRef.current = null;
         setCurrentUser(null);
         setEvents([]);
@@ -241,7 +244,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-      // Limpa estado imediatamente para UX responsiva e redirecionamento
+      // 1. Limpa estado imediatamente para dar feedback visual instantâneo (UX)
+      setLoading(true); // Opcional, para mostrar loader brevemente
       setCurrentUser(null);
       setEvents([]);
       setPlans([]);
@@ -249,14 +253,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsers([]);
       setPosts([]);
       
-      // Reseta a trava para permitir login futuro
+      // 2. Reseta a referência para permitir login futuro
       currentUserIdRef.current = null;
       
-      // Chama o logout no backend
+      // 3. Chama o logout real no backend
       try {
         await supabase.auth.signOut();
+        setLoading(false);
+        // Redirecionamento é automático pois currentUser virou null e App.tsx renderiza AuthForm
       } catch (error) {
         console.error("Erro silencioso no logout:", error);
+        setLoading(false);
       }
   };
 
