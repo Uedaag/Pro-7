@@ -241,8 +241,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+      // Limpa estado imediatamente para UX responsiva e redirecionamento
+      setCurrentUser(null);
+      setEvents([]);
+      setPlans([]);
+      setClasses([]);
+      setUsers([]);
+      setPosts([]);
+      
+      // Reseta a trava para permitir login futuro
       currentUserIdRef.current = null;
-      await supabase.auth.signOut();
+      
+      // Chama o logout no backend
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.error("Erro silencioso no logout:", error);
+      }
   };
 
   const addClass = async (c: any) => {

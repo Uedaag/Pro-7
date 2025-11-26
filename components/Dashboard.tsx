@@ -31,9 +31,17 @@ export const Dashboard: React.FC<{ user: User; onNavigate: (view: View) => void 
           onClick={() => onNavigate('profile')} 
           className="flex items-center gap-3 px-5 py-2.5 bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-colors shadow-sm"
         >
-            <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 flex items-center justify-center font-bold text-xs">
-              {user.name.charAt(0)}
-            </div>
+            {user.avatarUrl ? (
+              <img 
+                src={user.avatarUrl} 
+                alt={user.name} 
+                className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-white/10" 
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 flex items-center justify-center font-bold text-xs">
+                {user.name.charAt(0)}
+              </div>
+            )}
             <span className="font-bold text-sm text-slate-700 dark:text-slate-300">Meu Perfil</span>
             <ChevronRight size={16} className="text-slate-400"/>
         </button>

@@ -148,9 +148,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* User Profile */}
         <div className={`flex items-center gap-3 ${!isOpen && 'justify-center'}`}>
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold shrink-0 shadow-lg shadow-cyan-500/20">
-            {user.name.charAt(0).toUpperCase()}
-          </div>
+          {user.avatarUrl ? (
+            <img 
+              src={user.avatarUrl} 
+              alt={user.name} 
+              className="w-10 h-10 rounded-full object-cover shadow-lg shadow-cyan-500/20 border-2 border-white dark:border-slate-700 shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold shrink-0 shadow-lg shadow-cyan-500/20">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          
           {isOpen && (
             <div className="flex-1 overflow-hidden">
               <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{user.name}</p>
