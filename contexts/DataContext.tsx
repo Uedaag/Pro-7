@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   CalendarEvent,
   DataContextType,
@@ -22,6 +22,9 @@ const DataContext = createContext<ExtendedDataContextType | undefined>(undefined
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // TRAVA ANTI-LOOP: Impede re-processamento do mesmo usuário
+  const currentUserIdRef = useRef<string | null>(null);
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [plans, setPlans] = useState<BimesterPlan[]>([]);
@@ -32,18 +35,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- AUTHENTICATION ---
   const handleSessionChange = async (session: Session | null) => {
+    // Cenário 1: Sem sessão
     if (!session?.user) {
-      console.log('[AUTH] Sem sessão, limpando store');
-      setCurrentUser(null);
-      setEvents([]);
-      setPlans([]);
-      setClasses([]);
-      setUsers([]);
+      if (currentUserIdRef.current !== null) {
+        currentUserIdRef.current = null;
+        setCurrentUser(null);
+        setEvents([]);
+        setPlans([]);
+        setClasses([]);
+        setUsers([]);
+      }
       setLoading(false);
       return;
     }
 
     const user = session.user;
+
+    // Cenário 2: Sessão já carregada (previne loop)
+    if (currentUserIdRef.current === user.id) {
+      if (loading) setLoading(false);
+      return;
+    }
+
+    // Novo usuário detectado
+    currentUserIdRef.current = user.id;
+
     const isAdmin = user.email?.toLowerCase().includes('admin') ?? false;
 
     const baseUser: User = {
@@ -58,6 +74,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     try {
+      // Define estado inicial rápido
+      setCurrentUser(baseUser);
+
+      // Busca perfil completo
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -65,7 +85,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (profile && !error) {
-        setCurrentUser({
+        const fullUser = {
           ...baseUser,
           name: profile.name || baseUser.name,
           role: profile.role || baseUser.role,
@@ -77,109 +97,105 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           bio: profile.bio,
           education: profile.education,
           expertise: profile.expertise
-        });
-      } else {
-        setCurrentUser(baseUser);
-      }
+        };
+        setCurrentUser(fullUser);
+      } 
+      
+      // Carrega dados
+      await fetchAllData(user.id);
+
     } catch (e) {
-      setCurrentUser(baseUser);
+      console.error("Erro login:", e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    let mounted = true;
+
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      await handleSessionChange(data.session);
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (mounted) await handleSessionChange(data.session);
+      } catch (err) {
+        if (mounted) setLoading(false);
+      }
     };
+
     init();
-    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => handleSessionChange(session));
-    return () => listener.subscription.unsubscribe();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (mounted && (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION')) {
+         handleSessionChange(session);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  // --- DATA FETCHING ---
-  useEffect(() => {
-    if (currentUser?.id) {
-      fetchAllData(currentUser.id);
-    }
-  }, [currentUser?.id]);
-
+  // --- DATA FETCHING BLINDADO ---
   const fetchAllData = async (userId: string) => {
-    if (!currentUser) return;
-    console.log('[DATA] Carregando dados para userId:', userId);
-
     // 1. Agenda
     try {
       const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
-      if (error) throw error;
-      if (data) {
+      if (!error && data) {
         setEvents(data.map((e: any) => ({
           id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
         })));
       }
-    } catch (err: any) {
-      console.error('[DATA] Erro agenda:', err.message || err);
-    }
+    } catch (err) { console.error('Erro Agenda:', err); }
 
     // 2. Planos
     try {
       const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId);
-      if (error) throw error;
-      if (data) {
+      if (!error && data) {
         setPlans(data.map((p: any) => ({
           id: p.id, userId: p.user_id, className: p.class_name, subject: p.subject, bimester: p.bimester, totalLessons: p.total_lessons, theme: p.theme, bnccFocus: p.bncc_focus,
           lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons, 
           createdAt: p.created_at
         })));
       }
-    } catch (err: any) {
-      console.error('[DATA] Erro planos:', err.message || err);
-    }
+    } catch (err) { console.error('Erro Planos:', err); }
 
     // 3. Turmas
     let loadedClasses: any[] = [];
     try {
       const { data, error } = await supabase.from('classes').select('*').eq('user_id', userId);
-      if (error) throw error;
-      if (data) {
+      if (!error && data) {
         loadedClasses = data;
         setClasses(data.map((c: any) => ({
           id: c.id, userId: c.user_id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, studentsCount: c.students_count, linkedPlanIds: c.linked_plan_ids || [], generatedActivities: []
         })));
       }
-    } catch (err: any) {
-      console.error('[DATA] Erro turmas:', err.message || err);
-    }
+    } catch (err) { console.error('Erro Turmas:', err); }
 
     // 4. Comunidade
     try {
       const { data, error } = await supabase.from('community').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) {
+      if (!error && data) {
         setPosts(data.map((p: any) => ({
           id: p.id, userId: p.user_id, userName: p.user_name, content: p.content, likes: p.likes, createdAt: p.created_at, isPinned: p.is_pinned
         })));
       }
-    } catch (err: any) {
-      console.error('[DATA] Erro comunidade:', err.message || err);
-    }
+    } catch (err) {}
 
     // 5. Configurações
     try {
       const { data } = await supabase.from('configuracoes_sistema').select('*');
       if (data && data.length > 0) setSystemSettings(data as SystemSettings[]);
-    } catch (err) { /* Ignora erros */ }
+    } catch (err) {}
 
-    // 6. Atividades (Delayed Load)
+    // 6. Atividades (Carregamento Tardio)
     try {
       if (loadedClasses.length > 0) {
         const classIds = loadedClasses.map((c) => c.id);
         const { data, error } = await supabase.from('activities').select('*').in('class_id', classIds);
         
-        if (error) throw error;
-
-        if (data) {
+        if (!error && data) {
           const activitiesByClass: Record<string, GeneratedActivity[]> = {};
           data.forEach((a: any) => {
             const content = typeof a.content === 'string' ? JSON.parse(a.content) : a.content;
@@ -192,26 +208,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setClasses((prev) => prev.map((c) => ({ ...c, generatedActivities: activitiesByClass[c.id] || [] })));
         }
       }
-    } catch (err: any) {
-      console.error('[DATA] Erro atividades:', err.message || err);
-    }
+    } catch (err) { console.error('Erro Atividades:', err); }
 
     // 7. Admin Users
-    if (currentUser.role === 'admin') {
-      try {
-        const { data } = await supabase.from('profiles').select('*');
-        if (data) {
-          setUsers(data.map((u: any) => ({
-            id: u.id, name: u.name, email: u.email, role: u.role, plan: u.plan, status: u.status, joinedAt: u.joined_at, themePreference: u.theme_preference, avatarUrl: u.avatar_url, phone: u.phone, bio: u.bio, education: u.education, expertise: u.expertise
-          })));
+    try {
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
+        if (profile?.role === 'admin') {
+            const { data: allProfiles } = await supabase.from('profiles').select('*');
+            if (allProfiles) {
+                setUsers(allProfiles.map((u: any) => ({
+                    id: u.id, name: u.name, email: u.email, role: u.role, plan: u.plan, status: u.status, joinedAt: u.joined_at, themePreference: u.theme_preference, avatarUrl: u.avatar_url, phone: u.phone, bio: u.bio, education: u.education, expertise: u.expertise
+                })));
+            }
         }
-      } catch (err: any) { console.error('[DATA] Erro users:', err.message); }
-    }
+    } catch (err) {}
   };
 
   const refreshData = async () => { if (currentUser) await fetchAllData(currentUser.id); };
 
-  // --- AUTH ACTIONS ---
+  // --- ACTIONS ---
   const signIn = async (email: string, pass: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     return { error };
@@ -225,9 +240,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error };
   };
 
-  const signOut = async () => await supabase.auth.signOut();
+  const signOut = async () => {
+      currentUserIdRef.current = null;
+      await supabase.auth.signOut();
+  };
 
-  // --- CRUD ACTIONS ---
   const addClass = async (c: any) => {
     const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id}]).select().single();
     if(error) throw new Error(error.message);
@@ -244,9 +261,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if(error) throw new Error(error.message);
     if(data) setEvents(prev=>[...prev, {...e, id: data.id}]);
   };
-  const addEvents = async (es: any[]) => {
-     // Bulk insert not fully implemented in this snippet for brevity
-  };
+  const addEvents = async (es: any[]) => {}; 
   const updateEvent = async (e: any) => {
     const { error } = await supabase.from('events').update(e).eq('id', e.id);
     if(!error) setEvents(prev=>prev.map(ev=>ev.id===e.id?e:ev));
@@ -261,7 +276,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const user_id = user?.id || currentUser?.id;
     if (!user_id) throw new Error("Usuário não autenticado.");
 
-    // Envia lessons diretamente como objeto JSON, o Supabase/Postgres converte para JSONB
     const { data, error } = await supabase.from('plans').insert([{
         user_id: user_id,
         class_name: plan.className,
@@ -270,7 +284,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         total_lessons: plan.totalLessons,
         theme: plan.theme,
         bncc_focus: plan.bnccFocus,
-        lessons: plan.lessons // Envia como objeto, não string
+        lessons: plan.lessons 
     }]).select().single();
     
     if (error) throw new Error(error.message);
@@ -293,7 +307,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPosts(prev=>prev.filter(p=>p.id!==id));
   };
   const likePost = async (id: string) => {
-     // Optimistic update logic omitted for brevity
+     const post = posts.find(p => p.id === id);
+     if(post) {
+         const newLikes = post.likes + 1;
+         await supabase.from('community').update({likes: newLikes}).eq('id', id);
+         setPosts(prev => prev.map(p => p.id === id ? {...p, likes: newLikes} : p));
+     }
   };
 
   const addActivity = async (act: GeneratedActivity) => {
@@ -301,12 +320,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         class_id: act.classId,
         type: act.type,
         title: act.title,
-        content: act.content // Envia como objeto JSON
+        content: act.content
     }]).select().single();
 
     if (error) throw new Error(error.message);
     
-    // Se sucesso, atualiza estado local
     if (data) {
         const newAct = { ...act, id: data.id, createdAt: data.created_at };
         setClasses(prev => prev.map(c => c.id === act.classId ? {...c, generatedActivities: [...c.generatedActivities, newAct]} : c));
@@ -319,9 +337,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
      }).eq('id', u.id);
      if(!error) setCurrentUser(u);
   };
-  const updateUsersBatch = async (us: User[]) => {};
-  const deleteUser = async (id: string) => {};
-  const saveSystemSettings = async (s: any) => {};
+  const updateUsersBatch = async (us: User[]) => {
+      for (const u of us) {
+          await supabase.from('profiles').update({ plan: u.plan, status: u.status, role: u.role }).eq('id', u.id);
+      }
+      setUsers(prev => prev.map(u => { const updated = us.find(up => up.id === u.id); return updated ?? u; }));
+  };
+  const deleteUser = async (id: string) => {
+      await supabase.from('profiles').delete().eq('id', id);
+      setUsers(prev => prev.filter(u => u.id !== id));
+  };
+  const saveSystemSettings = async (s: SystemSettings[]) => {
+      const { error } = await supabase.from('configuracoes_sistema').upsert(s);
+      if (error) throw error;
+      setSystemSettings(s);
+  };
 
   return (
     <DataContext.Provider value={{

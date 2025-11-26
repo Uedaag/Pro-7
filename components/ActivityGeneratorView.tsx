@@ -1,73 +1,71 @@
+
 import React, { useState } from 'react';
 import { 
-  Wand2, Loader2, Save, Users, Calendar, BookOpen, Type, 
-  CheckSquare, FileText, GraduationCap, Presentation, Palette, BrainCircuit,
-  ChevronLeft, ArrowRight
+  Wand2, Loader2, Save, Users, Calendar, Type, 
+  CheckSquare, FileText, GraduationCap, Presentation, 
+  Palette, BrainCircuit, ChevronLeft, ArrowRight, CheckCircle
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { generateEducationalActivity } from '../services/geminiService';
 import { ActivityContent, ActivityType, GeneratedActivity } from '../types';
 
 export const ActivityGeneratorView: React.FC = () => {
-  const { classes, events, plans, addActivity } = useData();
+  const { classes, events, addActivity } = useData();
   
-  // Controle de Passos
+  // Estados de Navegação e Seleção
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Estados dos Dados
+  
+  // Dados do Formulário
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [selectedContentSource, setSelectedContentSource] = useState<'manual' | 'agenda' | 'plan'>('manual');
-  const [selectedContentText, setSelectedContentText] = useState('');
+  const [knowledgeSource, setKnowledgeSource] = useState<'manual' | 'agenda'>('manual');
   const [manualTopic, setManualTopic] = useState('');
+  const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedType, setSelectedType] = useState<ActivityType>('Prova');
   
   // Resultado
   const [result, setResult] = useState<ActivityContent | null>(null);
 
-  // Derivados
+  // Helpers
   const currentClass = classes.find(c => c.id === selectedClassId);
   
-  // Filtra conteúdos recentes da agenda e planos para sugerir
-  const recentEvents = events
-    .filter(e => e.classId === selectedClassId || e.className === currentClass?.name)
-    .slice(0, 3);
-    
-  const recentPlans = plans
-    .filter(p => p.className === currentClass?.name)
-    .slice(0, 3);
-
-  const handleNext = () => {
-    if (step === 1 && selectedClassId) setStep(2);
-    else if (step === 2 && (selectedContentText || manualTopic)) setStep(3);
-    else if (step === 3) handleGenerate();
-  };
-
-  const handleBack = () => {
-    if (step > 1) setStep(step - 1);
-  };
+  // Filtra eventos da turma selecionada (ou todos se não tiver filtro estrito ainda)
+  const classEvents = events
+    .filter(e => e.classId === selectedClassId || !e.classId)
+    .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
+    .slice(0, 5); // Pega os 5 mais recentes
 
   const handleGenerate = async () => {
     if (!currentClass) return;
+    
+    let topicToUse = '';
+    if (knowledgeSource === 'manual') {
+        topicToUse = manualTopic;
+    } else {
+        const evt = events.find(e => e.id === selectedEventId);
+        topicToUse = evt ? `${evt.title} - ${evt.description || ''}` : manualTopic;
+    }
+
+    if (!topicToUse) {
+        alert("Por favor, defina o tema ou selecione uma aula.");
+        return;
+    }
+
     setIsLoading(true);
-
     try {
-      // Define o conteúdo final
-      const finalContent = selectedContentSource === 'manual' ? manualTopic : selectedContentText;
-      const contentsArray = [finalContent];
-
       const data = await generateEducationalActivity(
-        selectedType, 
-        currentClass.subject, 
-        currentClass.grade, 
-        contentsArray, 
-        'Padrão'
+          selectedType, 
+          currentClass.subject, 
+          currentClass.grade, 
+          [topicToUse], 
+          'Padrão'
       );
-      
       setResult(data);
     } catch (e: any) { 
-      alert("Erro ao gerar atividade: " + e.message); 
+      let msg = e.message || "Erro desconhecido";
+      if (msg.includes('PERMISSION_DENIED')) msg = "Erro de permissão na API (Chave inválida ou bloqueada).";
+      alert("Erro ao gerar: " + msg); 
     } finally { 
       setIsLoading(false); 
     }
@@ -76,293 +74,332 @@ export const ActivityGeneratorView: React.FC = () => {
   const handleSave = async () => {
     if (!currentClass || !result) return;
     setIsSaving(true);
-    
     try {
-        const newActivity: GeneratedActivity = {
-           id: '', // O ID será gerado pelo banco
-           classId: currentClass.id,
-           type: selectedType,
-           title: result.header.title,
-           content: result,
-           createdAt: new Date().toISOString(),
-           relatedLessonIds: []
+        const newActivity: GeneratedActivity = { 
+            id: '', 
+            classId: currentClass.id, 
+            type: selectedType, 
+            title: result.header.title, 
+            content: result, 
+            createdAt: new Date().toISOString() 
         };
-        
-        // Usa a função correta para inserir na tabela activities
         await addActivity(newActivity);
-
-        alert("Atividade salva com sucesso na turma!");
-        
-        // Reset
-        setResult(null);
+        alert("Material salvo na biblioteca da turma com sucesso!");
+        setResult(null); 
         setStep(1);
-        setSelectedClassId('');
         setManualTopic('');
-        setSelectedContentText('');
-    } catch (e: any) {
-        alert("Erro ao salvar atividade: " + e.message);
-    } finally {
-        setIsSaving(false);
+        setSelectedEventId('');
+    } catch (e: any) { 
+        alert("Erro ao salvar: " + e.message); 
+    } finally { 
+        setIsSaving(false); 
     }
   };
 
-  // --- RENDERIZADORES DE ETAPAS ---
-
-  const renderProgressBar = () => (
-    <div className="flex justify-center mb-8 gap-2">
-      {[1, 2, 3].map(i => (
-        <div 
-          key={i} 
-          className={`h-2 w-16 rounded-full transition-colors ${
-            step >= i ? 'bg-cyan-600' : 'bg-slate-200 dark:bg-slate-700'
-          }`}
-        />
-      ))}
-    </div>
-  );
-
-  const renderStep1_ClassSelection = () => (
-    <div className="animate-fade-in">
-      <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">1. Selecione a Turma</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {classes.length === 0 ? (
-          <div className="col-span-3 text-center py-10 border-2 border-dashed border-slate-200 rounded-xl text-slate-400">
-            Nenhuma turma encontrada. Crie turmas no menu "Turmas".
-          </div>
-        ) : (
-          classes.map(cls => (
-            <button
-              key={cls.id}
-              onClick={() => setSelectedClassId(cls.id)}
-              className={`p-6 rounded-xl border text-left transition-all group ${
-                selectedClassId === cls.id 
-                  ? 'bg-cyan-50 border-cyan-500 ring-1 ring-cyan-500' 
-                  : 'bg-white dark:bg-[#0f172a] border-slate-200 dark:border-white/10 hover:border-cyan-400'
-              }`}
-            >
-              <h3 className="font-bold text-slate-800 dark:text-white group-hover:text-cyan-700">{cls.name}</h3>
-              <p className="text-sm text-slate-500">{cls.subject} • {cls.grade}</p>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  );
-
-  const renderStep2_ContentSelection = () => (
-    <div className="animate-fade-in">
-      <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">2. Base de Conhecimento</h2>
-      
-      <div className="space-y-4">
-        {/* Opção Manual */}
-        <label 
-          className={`block p-4 rounded-xl border cursor-pointer transition-all ${
-            selectedContentSource === 'manual' 
-              ? 'bg-cyan-50 border-cyan-500 ring-1 ring-cyan-500' 
-              : 'bg-white dark:bg-[#0f172a] border-slate-200 dark:border-white/10 hover:border-cyan-300'
-          }`}
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <input 
-              type="radio" 
-              name="source" 
-              checked={selectedContentSource === 'manual'} 
-              onChange={() => setSelectedContentSource('manual')}
-              className="text-cyan-600 focus:ring-cyan-500"
-            />
-            <span className="font-bold text-slate-800 dark:text-white flex items-center gap-2"><Type size={18}/> Digitar Tema Manualmente</span>
-          </div>
-          {selectedContentSource === 'manual' && (
-            <input 
-              autoFocus
-              type="text" 
-              placeholder="Ex: Revolução Industrial e seus impactos sociais..."
-              className="w-full p-3 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-cyan-500 bg-white dark:bg-slate-900"
-              value={manualTopic}
-              onChange={(e) => setManualTopic(e.target.value)}
-            />
-          )}
-        </label>
-
-        {/* Sugestões da Agenda */}
-        {recentEvents.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-bold text-slate-500 uppercase ml-1">Da sua Agenda</p>
-            {recentEvents.map(evt => (
-              <label 
-                key={evt.id}
-                className={`block p-4 rounded-xl border cursor-pointer transition-all ${
-                  selectedContentSource === 'agenda' && selectedContentText === evt.title
-                    ? 'bg-cyan-50 border-cyan-500 ring-1 ring-cyan-500' 
-                    : 'bg-white dark:bg-[#0f172a] border-slate-200 dark:border-white/10 hover:border-cyan-300'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="radio" 
-                    name="source" 
-                    checked={selectedContentSource === 'agenda' && selectedContentText === evt.title} 
-                    onChange={() => {
-                      setSelectedContentSource('agenda');
-                      setSelectedContentText(evt.title);
-                    }}
-                    className="text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <div>
-                    <span className="font-bold text-slate-800 dark:text-white block">{evt.title}</span>
-                    <span className="text-xs text-slate-400 uppercase flex items-center gap-1"><Calendar size={10}/> Agenda: {new Date(evt.start).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderStep3_TypeSelection = () => {
-    const types: { id: ActivityType, icon: any, label: string }[] = [
-      { id: 'Prova', icon: CheckSquare, label: 'Prova' },
-      { id: 'Atividade Avaliativa', icon: FileText, label: 'Atividade Avaliativa' },
-      { id: 'Trabalho', icon: GraduationCap, label: 'Trabalho' },
-      { id: 'Apresentação', icon: Presentation, label: 'Apresentação' },
-      { id: 'Atividade Criativa', icon: Palette, label: 'Atividade Criativa' },
-      { id: 'Quiz', icon: BrainCircuit, label: 'Quiz' },
-    ];
-
-    return (
-      <div className="animate-fade-in">
-        <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">3. Tipo de Material</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {types.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedType(t.id)}
-              className={`p-6 rounded-xl border flex flex-col items-center justify-center gap-3 transition-all h-40 ${
-                selectedType === t.id
-                  ? 'bg-cyan-50 border-cyan-500 ring-1 ring-cyan-500 text-cyan-700' 
-                  : 'bg-white dark:bg-[#0f172a] border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-600'
-              }`}
-            >
-              <t.icon size={32} strokeWidth={1.5} />
-              <span className="font-bold text-sm">{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
+  // Ícones para os tipos
+  const getActivityIcon = (type: ActivityType) => {
+      switch (type) {
+          case 'Prova': return CheckSquare;
+          case 'Atividade Avaliativa': return FileText;
+          case 'Trabalho': return GraduationCap;
+          case 'Apresentação': return Presentation;
+          case 'Atividade Criativa': return Palette;
+          case 'Quiz': return BrainCircuit;
+          default: return FileText;
+      }
   };
 
-  // --- RENDERIZADORES ---
-
-  if (isLoading) {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center animate-fade-in">
-        <Loader2 className="animate-spin text-cyan-600 mb-4" size={48} />
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Criando Material...</h2>
-        <p className="text-slate-500 text-center max-w-md">
-          A IA está estruturando sua {selectedType} sobre "{selectedContentSource === 'manual' ? manualTopic : selectedContentText}".
-        </p>
-      </div>
-    );
-  }
-
+  // --- RENDERIZAÇÃO DO RESULTADO ---
   if (result) {
     return (
-      <div className="max-w-4xl mx-auto py-8 animate-fade-in">
+      <div className="max-w-5xl mx-auto pb-20 animate-fade-in">
+        <button onClick={() => setResult(null)} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-cyan-600 transition-colors font-bold">
+            <ChevronLeft size={20} /> Voltar para edição
+        </button>
         <div className="bg-white dark:bg-[#0f172a] rounded-3xl shadow-xl border border-slate-200 dark:border-white/10 overflow-hidden">
-          <div className="p-8 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#020410]">
-            <div className="flex items-center justify-between mb-4">
-              <span className="px-3 py-1 bg-cyan-100 text-cyan-700 rounded-full text-xs font-bold uppercase tracking-wider">
-                {selectedType}
-              </span>
-              <button onClick={() => setResult(null)} className="text-slate-400 hover:text-red-500 text-sm font-bold">
-                Descartar
-              </button>
+          <div className="p-8 border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-[#020410] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white">{result.header.title}</h1>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{result.header.subtitle}</p>
             </div>
-            <h1 className="text-3xl font-black text-slate-800 dark:text-white mb-2">{result.header.title}</h1>
-            <p className="text-slate-500 dark:text-slate-400">{result.header.subtitle}</p>
-          </div>
-
-          <div className="p-8 space-y-8 bg-slate-50/50 dark:bg-[#0b1121]">
-            {/* Preview do Conteúdo (Resumo) */}
-            <div className="prose dark:prose-invert max-w-none">
-              <h3 className="text-sm font-bold uppercase text-slate-400 mb-2">Introdução Gerada</h3>
-              <p className="text-slate-700 dark:text-slate-300 italic bg-white dark:bg-black/20 p-4 rounded-lg border border-slate-100 dark:border-white/5">
-                "{result.introText}"
-              </p>
-              
-              <div className="mt-6 flex gap-4">
-                <div className="flex-1 bg-white dark:bg-black/20 p-4 rounded-lg border border-slate-100 dark:border-white/5">
-                  <span className="block text-2xl font-bold text-slate-800 dark:text-white">{result.questions?.length || 0}</span>
-                  <span className="text-xs text-slate-500 uppercase font-bold">Questões</span>
-                </div>
-                <div className="flex-1 bg-white dark:bg-black/20 p-4 rounded-lg border border-slate-100 dark:border-white/5">
-                   <span className="block text-2xl font-bold text-slate-800 dark:text-white">{result.slides?.length || 0}</span>
-                   <span className="text-xs text-slate-500 uppercase font-bold">Slides</span>
-                </div>
-              </div>
-            </div>
-
             <button 
-              onClick={handleSave}
-              disabled={isSaving}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-3 transition-transform hover:-translate-y-1 disabled:opacity-50"
+                onClick={handleSave} 
+                disabled={isSaving} 
+                className="bg-cyan-600 hover:bg-cyan-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
             >
-              {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20} />}
-              {isSaving ? 'Salvando...' : `Salvar na Turma (${currentClass?.name})`}
+                {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>} 
+                Salvar Material
             </button>
+          </div>
+          <div className="p-8 bg-white dark:bg-[#0f172a] min-h-[500px] overflow-auto">
+             <div className="max-w-3xl mx-auto space-y-8">
+                {/* Preview Simplificado do Conteúdo */}
+                {result.introText && (
+                    <div className="prose dark:prose-invert max-w-none">
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Introdução</h3>
+                        <p className="text-slate-600 dark:text-slate-300 whitespace-pre-line">{result.introText}</p>
+                    </div>
+                )}
+                
+                {result.questions && result.questions.length > 0 && (
+                    <div className="space-y-6">
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2">Questões</h3>
+                        {result.questions.map((q, idx) => (
+                            <div key={idx} className="bg-slate-50 dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-white/5">
+                                <div className="flex gap-3">
+                                    <span className="font-bold text-cyan-600 text-lg">{idx + 1}.</span>
+                                    <div className="flex-1">
+                                        <p className="font-medium text-slate-800 dark:text-white mb-3">{q.statement}</p>
+                                        {q.type === 'objective' && q.options && (
+                                            <ul className="space-y-2">
+                                                {q.options.map((opt, i) => (
+                                                    <li key={i} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                                                        <div className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600"></div>
+                                                        {opt}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        {q.type === 'discursive' && (
+                                            <div className="h-20 border-b border-slate-300 dark:border-slate-700 border-dashed mt-2"></div>
+                                        )}
+                                        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/5 text-xs text-emerald-600 dark:text-emerald-400 font-mono">
+                                            Gabarito: {q.correctAnswer}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {result.slides && result.slides.length > 0 && (
+                    <div className="space-y-6">
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2">Slides</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {result.slides.map((slide, idx) => (
+                                <div key={idx} className="aspect-video bg-slate-800 rounded-xl p-6 text-white flex flex-col justify-center relative overflow-hidden group">
+                                    <div className="absolute top-0 left-0 w-2 h-full bg-cyan-500"></div>
+                                    <h4 className="text-xl font-bold mb-4 relative z-10">{slide.title}</h4>
+                                    <ul className="space-y-2 text-sm text-slate-300 relative z-10 list-disc pl-4">
+                                        {slide.bullets.slice(0, 3).map((b, i) => <li key={i}>{b}</li>)}
+                                    </ul>
+                                    <div className="absolute bottom-2 right-4 text-xs text-slate-500">Slide {idx + 1}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+             </div>
           </div>
         </div>
       </div>
     );
   }
 
+  // --- RENDERIZAÇÃO DO WIZARD (INPUT) ---
   return (
-    <div className="max-w-4xl mx-auto py-8 text-center md:text-left">
-      <div className="mb-10 text-center">
-        <h1 className="text-3xl font-black text-slate-800 dark:text-white mb-2">Gerador de Conteúdo Profissional</h1>
-        <p className="text-slate-500 dark:text-slate-400">Crie materiais didáticos visualmente ricos e estruturados com IA.</p>
+    <div className="max-w-5xl mx-auto pb-20 animate-fade-in flex flex-col items-center min-h-[80vh] justify-center">
+      
+      <div className="text-center mb-10">
+         <h1 className="text-4xl font-black text-slate-800 dark:text-white mb-2">Gerador de Conteúdo Profissional</h1>
+         <p className="text-slate-500 dark:text-slate-400 text-lg">Crie materiais didáticos visualmente ricos e estruturados com IA.</p>
       </div>
 
-      <div className="bg-white dark:bg-white/[0.02] rounded-3xl shadow-xl border border-slate-200 dark:border-white/10 p-8 min-h-[500px] flex flex-col relative">
-        {renderProgressBar()}
+      {/* STEPPER */}
+      <div className="flex items-center gap-2 mb-12">
+         {[1, 2, 3].map(i => (
+             <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step === i ? 'w-12 bg-cyan-600' : step > i ? 'w-12 bg-cyan-200' : 'w-12 bg-slate-200 dark:bg-slate-800'}`}></div>
+         ))}
+      </div>
 
-        <div className="flex-1">
-          {step === 1 && renderStep1_ClassSelection()}
-          {step === 2 && renderStep2_ContentSelection()}
-          {step === 3 && renderStep3_TypeSelection()}
-        </div>
+      <div className="bg-white dark:bg-[#0f172a] w-full max-w-4xl rounded-3xl shadow-xl border border-slate-200 dark:border-white/10 overflow-hidden relative min-h-[500px] flex flex-col">
+         
+         {/* STEP 1: SELECIONAR TURMA */}
+         {step === 1 && (
+             <div className="flex-1 p-8 md:p-12 flex flex-col animate-fade-in">
+                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">1. Selecione a Turma</h2>
+                 
+                 {classes.length === 0 ? (
+                     <div className="flex-1 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl p-10">
+                         <Users size={48} className="text-slate-300 mb-4"/>
+                         <p className="text-slate-500 mb-4">Nenhuma turma encontrada.</p>
+                         <a href="#" className="text-cyan-600 font-bold hover:underline">Cadastrar Turma</a>
+                     </div>
+                 ) : (
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                         {classes.map(cls => (
+                             <button 
+                                key={cls.id}
+                                onClick={() => setSelectedClassId(cls.id)}
+                                className={`p-6 rounded-2xl border-2 text-left transition-all hover:-translate-y-1 group
+                                    ${selectedClassId === cls.id 
+                                        ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20' 
+                                        : 'border-slate-100 dark:border-white/5 bg-white dark:bg-white/5 hover:border-cyan-200'
+                                    }
+                                `}
+                             >
+                                 <h3 className={`font-bold text-lg mb-1 group-hover:text-cyan-600 ${selectedClassId === cls.id ? 'text-cyan-700 dark:text-cyan-400' : 'text-slate-700 dark:text-white'}`}>
+                                     {cls.name}
+                                 </h3>
+                                 <p className="text-sm text-slate-500">{cls.subject} • {cls.grade}</p>
+                             </button>
+                         ))}
+                     </div>
+                 )}
+             </div>
+         )}
 
-        {/* Footer Navigation */}
-        <div className="flex justify-between items-center mt-8 pt-6 border-t border-slate-100 dark:border-white/5">
-          <button 
-            onClick={handleBack}
-            disabled={step === 1}
-            className={`flex items-center gap-2 font-bold transition-colors ${step === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}`}
-          >
-            <ChevronLeft size={20} /> Voltar
-          </button>
+         {/* STEP 2: BASE DE CONHECIMENTO */}
+         {step === 2 && (
+             <div className="flex-1 p-8 md:p-12 flex flex-col animate-fade-in">
+                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">2. Base de Conhecimento</h2>
+                 
+                 <div className="space-y-6">
+                     {/* Opção Manual */}
+                     <div 
+                        className={`p-6 rounded-2xl border-2 transition-all cursor-pointer
+                            ${knowledgeSource === 'manual' ? 'border-cyan-500 bg-cyan-50/30 dark:bg-cyan-900/10' : 'border-slate-200 dark:border-white/10'}
+                        `}
+                        onClick={() => setKnowledgeSource('manual')}
+                     >
+                         <div className="flex items-center gap-3 mb-4">
+                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${knowledgeSource === 'manual' ? 'border-cyan-600' : 'border-slate-300'}`}>
+                                 {knowledgeSource === 'manual' && <div className="w-2.5 h-2.5 rounded-full bg-cyan-600"></div>}
+                             </div>
+                             <span className="font-bold text-slate-800 dark:text-white flex items-center gap-2"><Type size={18}/> Digitar Tema Manualmente</span>
+                         </div>
+                         
+                         {knowledgeSource === 'manual' && (
+                             <input 
+                                autoFocus
+                                value={manualTopic}
+                                onChange={(e) => setManualTopic(e.target.value)}
+                                placeholder="Ex: Revolução Industrial e seus impactos sociais..."
+                                className="w-full p-4 rounded-xl border border-cyan-200 dark:border-cyan-800/50 focus:ring-2 focus:ring-cyan-500 outline-none bg-white dark:bg-black/20 text-slate-800 dark:text-white"
+                             />
+                         )}
+                     </div>
 
-          {step < 3 ? (
-             <button 
-               onClick={handleNext}
-               disabled={step === 1 ? !selectedClassId : !selectedContentText && !manualTopic}
-               className="bg-cyan-600 hover:bg-cyan-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
-             >
-               Próximo <ArrowRight size={20} />
-             </button>
-          ) : (
-            <button 
-               onClick={handleGenerate}
-               className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-purple-500/20 flex items-center gap-2 transition-all hover:scale-105"
-             >
-               <Wand2 size={20} /> Gerar Material
-             </button>
-          )}
-        </div>
+                     {/* Opção Agenda */}
+                     <div 
+                        className={`p-6 rounded-2xl border-2 transition-all cursor-pointer
+                            ${knowledgeSource === 'agenda' ? 'border-cyan-500 bg-cyan-50/30 dark:bg-cyan-900/10' : 'border-slate-200 dark:border-white/10'}
+                        `}
+                        onClick={() => setKnowledgeSource('agenda')}
+                     >
+                         <div className="flex items-center gap-3 mb-4">
+                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${knowledgeSource === 'agenda' ? 'border-cyan-600' : 'border-slate-300'}`}>
+                                 {knowledgeSource === 'agenda' && <div className="w-2.5 h-2.5 rounded-full bg-cyan-600"></div>}
+                             </div>
+                             <span className="font-bold text-slate-800 dark:text-white uppercase text-xs tracking-wider">DA SUA AGENDA</span>
+                         </div>
+
+                         {knowledgeSource === 'agenda' && (
+                             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                 {classEvents.length === 0 ? (
+                                     <p className="text-sm text-slate-400 italic p-2">Nenhuma aula recente encontrada para esta turma.</p>
+                                 ) : (
+                                     classEvents.map(evt => (
+                                         <div 
+                                            key={evt.id}
+                                            onClick={(e) => { e.stopPropagation(); setSelectedEventId(evt.id); }}
+                                            className={`p-3 rounded-lg border flex items-center gap-3 transition-all hover:bg-white dark:hover:bg-white/5
+                                                ${selectedEventId === evt.id 
+                                                    ? 'border-cyan-500 bg-white dark:bg-white/5 ring-1 ring-cyan-500' 
+                                                    : 'border-transparent hover:border-slate-200'}
+                                            `}
+                                         >
+                                             <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedEventId === evt.id ? 'border-cyan-600' : 'border-slate-300'}`}>
+                                                 {selectedEventId === evt.id && <div className="w-2 h-2 rounded-full bg-cyan-600"></div>}
+                                             </div>
+                                             <div>
+                                                 <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">{evt.title}</p>
+                                                 <p className="text-xs text-slate-400 flex items-center gap-1"><Calendar size={10}/> DATA: {new Date(evt.start).toLocaleDateString()}</p>
+                                             </div>
+                                         </div>
+                                     ))
+                                 )}
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             </div>
+         )}
+
+         {/* STEP 3: TIPO DE MATERIAL */}
+         {step === 3 && (
+             <div className="flex-1 p-8 md:p-12 flex flex-col animate-fade-in">
+                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">3. Tipo de Material</h2>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     {(['Prova', 'Atividade Avaliativa', 'Trabalho', 'Apresentação', 'Atividade Criativa', 'Quiz'] as ActivityType[]).map((type) => {
+                         const Icon = getActivityIcon(type);
+                         const isSelected = selectedType === type;
+                         return (
+                             <button 
+                                key={type}
+                                onClick={() => setSelectedType(type)}
+                                className={`p-6 rounded-2xl border-2 flex flex-col items-center justify-center gap-4 transition-all h-40 group
+                                    ${isSelected 
+                                        ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20 shadow-md shadow-cyan-500/10' 
+                                        : 'border-slate-100 dark:border-white/5 bg-white dark:bg-white/5 hover:border-cyan-200 hover:bg-slate-50'}
+                                `}
+                             >
+                                 <Icon 
+                                    size={32} 
+                                    className={`transition-transform group-hover:scale-110 ${isSelected ? 'text-cyan-600' : 'text-slate-400 dark:text-slate-500 group-hover:text-cyan-500'}`} 
+                                    strokeWidth={1.5}
+                                 />
+                                 <span className={`font-bold text-sm ${isSelected ? 'text-cyan-700 dark:text-cyan-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                                     {type}
+                                 </span>
+                             </button>
+                         );
+                     })}
+                 </div>
+             </div>
+         )}
+
+         {/* FOOTER NAVIGATION */}
+         <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-[#0b1121]">
+             {step > 1 ? (
+                 <button 
+                    onClick={() => setStep(prev => prev - 1)}
+                    className="flex items-center gap-2 text-slate-500 hover:text-slate-800 dark:hover:text-white font-bold px-4 py-2"
+                 >
+                     <ChevronLeft size={20}/> Voltar
+                 </button>
+             ) : (
+                 <div></div> 
+             )}
+
+             {step < 3 ? (
+                 <button 
+                    onClick={() => {
+                        if (step === 1 && !selectedClassId) return alert("Selecione uma turma.");
+                        if (step === 2 && knowledgeSource === 'manual' && !manualTopic) return alert("Digite um tema.");
+                        if (step === 2 && knowledgeSource === 'agenda' && !selectedEventId) return alert("Selecione uma aula da agenda.");
+                        setStep(prev => prev + 1);
+                    }}
+                    className="bg-cyan-400 hover:bg-cyan-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
+                 >
+                     Próximo <ArrowRight size={20}/>
+                 </button>
+             ) : (
+                 <button 
+                    onClick={handleGenerate}
+                    disabled={isLoading}
+                    className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-transform hover:-translate-y-0.5"
+                 >
+                     {isLoading ? <Loader2 className="animate-spin" size={20}/> : <Wand2 size={20}/>} 
+                     Gerar Material
+                 </button>
+             )}
+         </div>
+
       </div>
     </div>
   );
 };
+    

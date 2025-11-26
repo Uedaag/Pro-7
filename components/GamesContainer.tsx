@@ -18,7 +18,24 @@ export const GamesContainer: React.FC = () => {
       setData(result);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Ocorreu um erro desconhecido. Verifique sua conexão e a chave de API.");
+      
+      let msg = err.message || "Ocorreu um erro desconhecido.";
+      
+      // Tenta limpar mensagens de erro JSON bruto
+      if (msg.includes('PERMISSION_DENIED') || msg.includes('API key')) {
+         msg = "Chave de API inválida ou bloqueada pelo Google. Verifique sua configuração no Vercel (VITE_GOOGLE_API_KEY).";
+      } else if (msg.includes('{')) {
+         try {
+            // Tenta extrair a mensagem de dentro do JSON
+            const jsonMatch = msg.match(/\{.*\}/);
+            if (jsonMatch) {
+               const parsed = JSON.parse(jsonMatch[0]);
+               if (parsed.error?.message) msg = parsed.error.message;
+            }
+         } catch (e) { /* ignore */ }
+      }
+      
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -49,9 +66,9 @@ export const GamesContainer: React.FC = () => {
           {error && (
              <div className="w-full max-w-2xl mb-6 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 p-4 rounded-xl flex items-start gap-3 text-sm text-left shadow-sm">
                <AlertCircle className="shrink-0 mt-0.5" size={18} />
-               <div>
+               <div className="flex-1">
                  <p className="font-bold mb-1">Falha na Geração</p>
-                 <p>{error}</p>
+                 <p className="break-words">{error}</p>
                </div>
              </div>
           )}

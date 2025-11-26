@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Folder, Plus, Edit3, Trash2, Save, X, 
-  BookOpen, CheckCircle, List, Table as TableIcon, Eye
+  BookOpen, CheckCircle, List, Table as TableIcon, Eye, AlertTriangle
 } from 'lucide-react';
 import { BimesterPlan, LessonRow, User } from '../types';
 import { generateBimesterPlan } from '../services/geminiService';
@@ -65,7 +65,7 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
 
     try {
       const newPlan: BimesterPlan = {
-        id: '', // Será gerado pelo DB ou Context
+        id: '', // Será gerado pelo DB
         userId: user.id,
         className: formData.className,
         subject: formData.subject,
@@ -85,7 +85,7 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
       setActiveTab('library');
     } catch (error: any) {
       console.error(error);
-      alert(`Erro ao salvar: ${error.message || "Erro desconhecido"}`);
+      alert(`Erro ao salvar no banco de dados: ${error.message || error}`);
     } finally {
       setIsSaving(false);
     }
@@ -126,41 +126,26 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
           </button>
         </div>
       </div>
-
-      {/* --- ABA: GERADOR --- */}
+      
       {activeTab === 'generator' && (
         <div className="space-y-8">
-          {/* Formulário de Configuração */}
           <section className="bg-white dark:bg-[#0f172a] rounded-2xl shadow-sm border border-slate-200 dark:border-white/10 p-6 md:p-8">
             <form onSubmit={handleGenerate} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Turma / Série</label>
-                  <input 
-                    required 
-                    placeholder="Ex: 6º Ano B" 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500"
-                    value={formData.className} 
-                    onChange={e=>setFormData({...formData, className: e.target.value})}
-                  />
+                  <input required placeholder="Ex: 6º Ano B" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white"
+                    value={formData.className} onChange={e=>setFormData({...formData, className: e.target.value})}/>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Disciplina</label>
-                  <input 
-                    required 
-                    placeholder="Ex: História" 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500"
-                    value={formData.subject} 
-                    onChange={e=>setFormData({...formData, subject: e.target.value})}
-                  />
+                  <input required placeholder="Ex: História" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white"
+                    value={formData.subject} onChange={e=>setFormData({...formData, subject: e.target.value})}/>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Período</label>
-                  <select 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500"
-                    value={formData.bimester} 
-                    onChange={e=>setFormData({...formData, bimester: e.target.value})}
-                  >
+                  <select className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white"
+                    value={formData.bimester} onChange={e=>setFormData({...formData, bimester: e.target.value})}>
                     <option>1º Bimestre</option>
                     <option>2º Bimestre</option>
                     <option>3º Bimestre</option>
@@ -169,66 +154,31 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="md:col-span-3">
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tema Geral / Conteúdo</label>
-                  <input 
-                    required 
-                    placeholder="Ex: Revolução Francesa e Era Napoleônica" 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500"
-                    value={formData.theme} 
-                    onChange={e=>setFormData({...formData, theme: e.target.value})}
-                  />
+                  <input required placeholder="Ex: Revolução Francesa" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white"
+                    value={formData.theme} onChange={e=>setFormData({...formData, theme: e.target.value})}/>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Qtd. Aulas</label>
-                  <input 
-                    type="number"
-                    required 
-                    min={1}
-                    max={40}
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500"
-                    value={formData.totalLessons} 
-                    onChange={e=>setFormData({...formData, totalLessons: parseInt(e.target.value)})}
-                  />
+                  <input type="number" required min={1} max={40} className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-slate-800 dark:text-white"
+                    value={formData.totalLessons} onChange={e=>setFormData({...formData, totalLessons: parseInt(e.target.value)})}/>
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Habilidades BNCC (Opcional)</label>
-                <textarea 
-                  rows={2}
-                  placeholder="Ex: EF08HI04, Identificar e relacionar os processos..." 
-                  className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
-                  value={formData.bnccFocus} 
-                  onChange={e=>setFormData({...formData, bnccFocus: e.target.value})}
-                />
+                <textarea rows={2} placeholder="Ex: EF08HI04..." className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 resize-none text-slate-800 dark:text-white"
+                  value={formData.bnccFocus} onChange={e=>setFormData({...formData, bnccFocus: e.target.value})}/>
               </div>
-
               <div className="pt-2">
-                <button 
-                  type="submit" 
-                  disabled={isLoading} 
-                  className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold shadow-lg shadow-cyan-500/20 flex justify-center items-center gap-3 transition-all hover:scale-[1.01]"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="animate-spin" />
-                      Gerando Planejamento...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 size={20} />
-                      Gerar Plano de Aula
-                    </>
-                  )}
+                <button type="submit" disabled={isLoading} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold shadow-lg shadow-cyan-500/20 flex justify-center items-center gap-3 transition-all hover:scale-[1.01]">
+                  {isLoading ? <><Loader2 className="animate-spin" /> Gerando Planejamento...</> : <><Wand2 size={20} /> Gerar Plano de Aula</>}
                 </button>
               </div>
             </form>
           </section>
 
-          {/* Resultado Gerado */}
           {generatedPlan && (
             <div className="animate-slide-in-from-bottom-4 space-y-6">
               <div className="bg-white dark:bg-[#0f172a] rounded-2xl shadow-xl border border-slate-200 dark:border-white/10 overflow-hidden">
@@ -237,16 +187,10 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                     <h2 className="text-xl font-bold text-slate-800 dark:text-white">Pré-visualização do Plano</h2>
                     <p className="text-sm text-slate-500">{formData.subject} - {formData.className}</p>
                   </div>
-                  <button 
-                    onClick={handleSaveToDb}
-                    disabled={isSaving}
-                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:-translate-y-0.5"
-                  >
-                    {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />}
-                    Salvar na Biblioteca
+                  <button onClick={handleSaveToDb} disabled={isSaving} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:-translate-y-0.5">
+                    {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />} Salvar na Biblioteca
                   </button>
                 </div>
-
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -260,32 +204,18 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                       {generatedPlan.map((lesson) => (
                         <tr key={lesson.id} className="hover:bg-slate-50 dark:hover:bg-white/5">
-                          <td className="p-4 text-center font-bold text-cyan-600 dark:text-cyan-400 align-top bg-slate-50/50 dark:bg-transparent">
-                            {lesson.number.toString().padStart(2, '0')}
-                          </td>
+                          <td className="p-4 text-center font-bold text-cyan-600 dark:text-cyan-400 align-top bg-slate-50/50 dark:bg-transparent">{lesson.number.toString().padStart(2, '0')}</td>
                           <td className="p-4 align-top">
                             <p className="font-bold text-slate-800 dark:text-white mb-2">{lesson.title}</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{lesson.objectives}</p>
                           </td>
                           <td className="p-4 align-top">
-                            <div className="mb-2">
-                              <span className="text-[10px] font-bold uppercase text-slate-400">Conteúdo</span>
-                              <p className="text-sm text-slate-700 dark:text-slate-300">{lesson.content}</p>
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold uppercase text-slate-400">Metodologia</span>
-                              <p className="text-xs text-slate-600 dark:text-slate-400 italic">{lesson.methodology}</p>
-                            </div>
+                            <div className="mb-2"><span className="text-[10px] font-bold uppercase text-slate-400">Conteúdo</span><p className="text-sm text-slate-700 dark:text-slate-300">{lesson.content}</p></div>
+                            <div><span className="text-[10px] font-bold uppercase text-slate-400">Metodologia</span><p className="text-xs text-slate-600 dark:text-slate-400 italic">{lesson.methodology}</p></div>
                           </td>
                           <td className="p-4 align-top bg-slate-50/30 dark:bg-white/[0.02]">
-                            <div className="mb-2">
-                              <span className="inline-block px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded text-[10px] font-bold mb-1">BNCC</span>
-                              <p className="text-xs text-slate-600 dark:text-slate-400 font-mono">{lesson.bnccSkill}</p>
-                            </div>
-                            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-white/5">
-                              <span className="text-[10px] font-bold uppercase text-slate-400">Recursos</span>
-                              <p className="text-xs text-slate-500 dark:text-slate-500">{lesson.resources}</p>
-                            </div>
+                            <div className="mb-2"><span className="inline-block px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded text-[10px] font-bold mb-1">BNCC</span><p className="text-xs text-slate-600 dark:text-slate-400 font-mono">{lesson.bnccSkill}</p></div>
+                            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-white/5"><span className="text-[10px] font-bold uppercase text-slate-400">Recursos</span><p className="text-xs text-slate-500 dark:text-slate-500">{lesson.resources}</p></div>
                           </td>
                         </tr>
                       ))}
@@ -303,42 +233,26 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
         <div className="space-y-6">
           {plans.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-[#0f172a] rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center">
-              <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 mb-4">
-                <Folder size={40} />
-              </div>
+              <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 mb-4"><Folder size={40} /></div>
               <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200">Biblioteca Vazia</h3>
-              <p className="text-slate-500 dark:text-slate-400 max-w-md mt-2">Você ainda não salvou nenhum plano de aula. Use o Gerador IA para criar seu primeiro planejamento.</p>
+              <p className="text-slate-500 dark:text-slate-400 max-w-md mt-2">Você ainda não salvou nenhum plano de aula.</p>
               <button onClick={() => setActiveTab('generator')} className="mt-6 text-cyan-600 font-bold hover:underline">Ir para o Gerador</button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {plans.map(plan => (
-                <div 
-                  key={plan.id} 
-                  onClick={() => setSelectedStoredPlan(plan)} 
-                  className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-700 transition-all cursor-pointer group relative"
-                >
+                <div key={plan.id} onClick={() => setSelectedStoredPlan(plan)} className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-700 transition-all cursor-pointer group relative">
                   <div className="flex justify-between items-start mb-4">
-                    <div className="p-3 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 rounded-xl group-hover:bg-cyan-600 group-hover:text-white transition-colors">
-                      <List size={24} />
-                    </div>
-                    <button 
-                      onClick={(e) => handleDelete(plan.id, e)} 
-                      className="p-2 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <div className="p-3 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 rounded-xl group-hover:bg-cyan-600 group-hover:text-white transition-colors"><List size={24} /></div>
+                    <button onClick={(e) => handleDelete(plan.id, e)} className="p-2 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={18} /></button>
                   </div>
-                  
                   <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-1 line-clamp-1">{plan.theme}</h3>
                   <p className="text-sm text-cyan-600 dark:text-cyan-400 font-bold mb-4">{plan.subject}</p>
-                  
                   <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">{plan.className}</span>
                     <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">{plan.bimester}</span>
                     <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">{plan.totalLessons} Aulas</span>
                   </div>
-                  
                   <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-xs text-slate-400">
                     <span>Criado em {new Date(plan.createdAt).toLocaleDateString()}</span>
                     <span className="flex items-center gap-1 font-bold text-slate-600 dark:text-slate-300 group-hover:translate-x-1 transition-transform">Ver Detalhes <Eye size={12}/></span>
@@ -350,55 +264,27 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
         </div>
       )}
 
-      {/* Modal de Detalhes do Plano Salvo */}
+      {/* Modal de Detalhes */}
       {selectedStoredPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-[#0f172a] w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-in">
             <div className="p-6 border-b border-slate-200 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-[#020410]">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white">{selectedStoredPlan.theme}</h2>
-                <p className="text-sm text-slate-500">{selectedStoredPlan.subject} • {selectedStoredPlan.className}</p>
-              </div>
-              <button 
-                onClick={() => setSelectedStoredPlan(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <X size={24}/>
-              </button>
+              <div><h2 className="text-xl font-bold text-slate-800 dark:text-white">{selectedStoredPlan.theme}</h2><p className="text-sm text-slate-500">{selectedStoredPlan.subject} • {selectedStoredPlan.className}</p></div>
+              <button onClick={() => setSelectedStoredPlan(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors"><X size={24}/></button>
             </div>
-            
             <div className="flex-1 overflow-auto p-6 md:p-8 bg-slate-100 dark:bg-[#0b1121]">
                <div className="bg-white dark:bg-[#0f172a] rounded-xl shadow-sm border border-slate-200 dark:border-white/10 overflow-hidden">
                  <table className="w-full text-left">
                     <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold">
-                       <tr>
-                          <th className="p-4 w-16 text-center">#</th>
-                          <th className="p-4 w-1/4">Tema</th>
-                          <th className="p-4">Desenvolvimento</th>
-                          <th className="p-4 w-1/4">BNCC & Recursos</th>
-                       </tr>
+                       <tr><th className="p-4 w-16 text-center">#</th><th className="p-4 w-1/4">Tema</th><th className="p-4">Desenvolvimento</th><th className="p-4 w-1/4">BNCC & Recursos</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                        {selectedStoredPlan.lessons.map((lesson) => (
                           <tr key={lesson.id} className="hover:bg-slate-50 dark:hover:bg-white/5">
                              <td className="p-4 text-center font-bold text-slate-400 align-top">{lesson.number}</td>
-                             <td className="p-4 align-top">
-                                <p className="font-bold text-slate-800 dark:text-white mb-2">{lesson.title}</p>
-                                <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
-                                   <p><span className="font-bold">Obj:</span> {lesson.objectives}</p>
-                                </div>
-                             </td>
-                             <td className="p-4 align-top">
-                                <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">{lesson.content}</p>
-                                <p className="text-xs text-slate-500 italic bg-slate-50 dark:bg-white/5 p-2 rounded">{lesson.methodology}</p>
-                             </td>
-                             <td className="p-4 align-top text-xs space-y-2">
-                                <div className="bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 px-2 py-1 rounded inline-block font-mono font-bold">
-                                   {lesson.bnccSkill}
-                                </div>
-                                <p className="text-slate-500"><span className="font-bold">Recursos:</span> {lesson.resources}</p>
-                                <p className="text-slate-500"><span className="font-bold">Avaliação:</span> {lesson.evaluation}</p>
-                             </td>
+                             <td className="p-4 align-top"><p className="font-bold text-slate-800 dark:text-white mb-2">{lesson.title}</p><div className="text-xs text-slate-500 dark:text-slate-400 space-y-1"><p><span className="font-bold">Obj:</span> {lesson.objectives}</p></div></td>
+                             <td className="p-4 align-top"><p className="text-sm text-slate-700 dark:text-slate-300 mb-2">{lesson.content}</p><p className="text-xs text-slate-500 italic bg-slate-50 dark:bg-white/5 p-2 rounded">{lesson.methodology}</p></td>
+                             <td className="p-4 align-top text-xs space-y-2"><div className="bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 px-2 py-1 rounded inline-block font-mono font-bold">{lesson.bnccSkill}</div><p className="text-slate-500"><span className="font-bold">Recursos:</span> {lesson.resources}</p><p className="text-slate-500"><span className="font-bold">Avaliação:</span> {lesson.evaluation}</p></td>
                           </tr>
                        ))}
                     </tbody>

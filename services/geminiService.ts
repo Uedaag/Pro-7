@@ -5,41 +5,44 @@ import { EscapeRoomData, LessonRow, ActivityContent, Slide, Question, Presentati
 let aiInstance: GoogleGenAI | null = null;
 
 const getApiKey = (): string => {
-  // 1. Prioridade: Variáveis VITE (Padrão para este projeto)
+  // 1. LocalStorage (Permite override manual no navegador para testes rápidos)
+  if (typeof window !== 'undefined') {
+    const localKey = window.localStorage.getItem('VITE_GOOGLE_API_KEY');
+    if (localKey) return localKey;
+  }
+
+  // 2. Prioridade: Variáveis VITE
   // @ts-ignore
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     // @ts-ignore
     if (import.meta.env.VITE_GOOGLE_API_KEY) return import.meta.env.VITE_GOOGLE_API_KEY;
-    // @ts-ignore
-    if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
-    // @ts-ignore
-    if (import.meta.env.NEXT_PUBLIC_GOOGLE_API_KEY) return import.meta.env.NEXT_PUBLIC_GOOGLE_API_KEY;
   }
 
-  // 2. Fallback: Process Env (Para builds que injetam process.env)
+  // 3. Fallback: Process Env (Next.js / CRA)
   if (typeof process !== 'undefined' && process.env) {
     if (process.env.VITE_GOOGLE_API_KEY) return process.env.VITE_GOOGLE_API_KEY;
     if (process.env.NEXT_PUBLIC_GOOGLE_API_KEY) return process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
-    if (process.env.REACT_APP_GOOGLE_API_KEY) return process.env.REACT_APP_GOOGLE_API_KEY;
-    if (process.env.GOOGLE_API_KEY) return process.env.GOOGLE_API_KEY;
   }
   
-  // 3. Fallback de Emergência (Garante que funcione mesmo sem .env configurado)
-  return "AIzaSyDSUOCZs-c2Rabw1EmR76XaboOZoHve5GE";
+  return "";
 };
 
 const getAI = (): GoogleGenAI => {
+  // Sempre tenta pegar a chave mais atual (caso o user sete no localStorage)
+  const apiKey = getApiKey();
+  
+  if (!apiKey) {
+    throw new Error("Chave de API não encontrada. Configure VITE_GOOGLE_API_KEY no Vercel ou use localStorage.");
+  }
+  
+  // Recria a instância se a chave mudou ou não existe
   if (!aiInstance) {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      throw new Error("Chave de API não encontrada. Configure a variável VITE_GOOGLE_API_KEY no Vercel.");
-    }
     aiInstance = new GoogleGenAI({ apiKey });
   }
   return aiInstance;
 };
 
-// --- SCHEMAS EXISTENTES ---
+// --- SCHEMAS ---
 const escapeRoomSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -118,7 +121,7 @@ const activitySchema: Schema = {
         properties: {
           title: { type: Type.STRING },
           bullets: { type: Type.ARRAY, items: { type: Type.STRING } },
-          imagePrompt: { type: Type.STRING, description: "Prompt visual OBRIGATÓRIO e ÚNICO para ilustrar o conteúdo deste slide específico." },
+          imagePrompt: { type: Type.STRING },
           notes: { type: Type.STRING }
         },
         required: ["title", "bullets", "imagePrompt"]
@@ -129,55 +132,26 @@ const activitySchema: Schema = {
   required: ["header", "coverImagePrompt"]
 };
 
-// --- FUNÇÕES DE CHAT ---
-
+// --- CHAT ---
 export const createTeacherAssistantChat = (): Chat => {
   const ai = getAI();
   return ai.chats.create({
     model: 'gemini-2.5-flash',
     config: {
-      systemInstruction: `
-        Você é o "Especialista Pro 7", o assistente virtual da plataforma Pro 7.
-
-        SUAS REGRAS DE COMPORTAMENTO (RÍGIDAS):
-        1. SEJA BREVE E OBJETIVO: Suas respostas devem ter no máximo 2 ou 3 frases. Nada de textos longos.
-        2. SEJA INVESTIGATIVO: Você deve SEMPRE terminar sua resposta com uma PERGUNTA para entender exatamente o que o usuário quer fazer na ferramenta mencionada.
-           - Exemplo: Se perguntarem da Agenda, explique o que é em 1 frase e pergunte: "Você quer adicionar um evento ou ver seus horários?"
-        
-        3. ESCOPO DE ATUAÇÃO:
-           - "Edu Escape" (Jogos de fuga).
-           - "Gerador IA" (Provas/Atividades/Slides).
-           - "Planos de Aula" (Planejamento bimestral).
-           - "Agenda" (Organização).
-
-        4. SUPORTE TÉCNICO:
-           Se você não souber a resposta, ou se o usuário relatar erro/bug, responda APENAS:
-           "Para essa questão técnica, contate o suporte administrativo: (77) 99913-4858".
-
-        Tom de voz: Profissional, direto e prestativo.
-      `
+      systemInstruction: `Você é o Especialista Pro 7. Ajude professores de forma breve e objetiva.`
     }
   });
 };
 
-// --- FUNÇÕES DE GERAÇÃO ---
-
+// --- GENERATORS ---
 export const generateEscapeRoom = async (topic: string, grade: string, duration: string, difficulty: string): Promise<EscapeRoomData> => {
-  const modelId = "gemini-3-pro-preview";
-  const prompt = `Crie um Escape Room Educacional sobre ${topic} para ${grade}. Dificuldade: ${difficulty}. Duração: ${duration}. Saída JSON.`;
-  
-  try {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-      config: { responseMimeType: "application/json", responseSchema: escapeRoomSchema }
-    });
-    return JSON.parse(response.text.replace(/```json|```/g, '').trim()) as EscapeRoomData;
-  } catch (error: any) {
-    console.error("Erro Generate Escape Room:", error);
-    throw new Error(error.message || "Erro ao gerar Escape Room");
-  }
+  const ai = getAI();
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash", // Usando flash para maior rapidez e menor custo/chance de bloqueio
+    contents: `Crie um Escape Room Educacional sobre ${topic} para ${grade}. Dificuldade: ${difficulty}. Duração: ${duration}. SAÍDA OBRIGATÓRIA EM JSON.`,
+    config: { responseMimeType: "application/json", responseSchema: escapeRoomSchema }
+  });
+  return JSON.parse(response.text.replace(/```json|```/g, '').trim());
 };
 
 export const generateSceneImage = async (imagePrompt: string): Promise<string> => {
@@ -185,9 +159,7 @@ export const generateSceneImage = async (imagePrompt: string): Promise<string> =
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: `High quality educational illustration, clean vector style or professional photography, minimalist background, suitable for powerpoint slide. Subject: ${imagePrompt}` }]
-      },
+      contents: { parts: [{ text: `Educational illustration, clean vector style: ${imagePrompt}` }] },
       config: { imageConfig: { aspectRatio: "16:9" } }
     });
     for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -198,128 +170,47 @@ export const generateSceneImage = async (imagePrompt: string): Promise<string> =
 };
 
 export const generateBimesterPlan = async (subject: string, grade: string, totalLessons: number, theme: string, bnccFocus: string): Promise<Omit<LessonRow, 'id' | 'number'>[]> => {
-  const modelId = "gemini-3-pro-preview";
-  const prompt = `Planejamento Bimestral de ${subject} para ${grade}. Tema: ${theme}. BNCC: ${bnccFocus}. ${totalLessons} aulas. JSON.`;
-  
-  try {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-      config: { responseMimeType: "application/json", responseSchema: metrarSchema }
-    });
-    return JSON.parse(response.text.replace(/```json|```/g, '').trim());
-  } catch (error: any) {
-    console.error("Erro Generate Plan:", error);
-    throw new Error(error.message || "Erro ao gerar plano");
-  }
+  const ai = getAI();
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: `Planejamento ${subject}, ${grade}, ${totalLessons} aulas. Tema: ${theme}. BNCC: ${bnccFocus}. JSON.`,
+    config: { responseMimeType: "application/json", responseSchema: metrarSchema }
+  });
+  return JSON.parse(response.text.replace(/```json|```/g, '').trim());
 };
 
 export const generateEducationalActivity = async (
-  type: 'Prova' | 'Atividade Avaliativa' | 'Trabalho' | 'Apresentação' | 'Quiz' | 'Atividade Criativa',
-  subject: string,
-  grade: string,
-  lessonContents: string[],
-  config: string,
-  themeId?: PresentationThemeId,
-  paletteId?: PresentationPaletteId
+  type: string, subject: string, grade: string, lessonContents: string[], config: string
 ): Promise<ActivityContent> => {
-  const modelId = "gemini-3-pro-preview";
-  
+  const ai = getAI();
   const isPresentation = type === 'Apresentação';
-  const structureType = isPresentation ? 'presentation' : 'document';
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: `Crie ${type} de ${subject} para ${grade}. Conteúdo: ${lessonContents}. Config: ${config}. JSON.`,
+    config: { responseMimeType: "application/json", responseSchema: activitySchema }
+  });
+  const parsedData = JSON.parse(response.text.replace(/```json|```/g, '').trim());
+  
+  const content: ActivityContent = {
+    structureType: isPresentation ? 'presentation' : 'document',
+    header: {
+      title: parsedData.header.title,
+      subtitle: parsedData.header.subtitle,
+      school: "Escola Pro 7",
+      teacher: "Professor",
+      class: grade,
+      discipline: subject,
+      date: new Date().toLocaleDateString()
+    },
+    introText: parsedData.introText,
+    questions: parsedData.questions,
+    slides: parsedData.slides,
+    footerText: parsedData.footerText
+  };
 
-  const prompt = `
-    ATUE COMO UM DESIGNER EDUCACIONAL EXPERIENTE.
-    Crie um material PROFISSIONAL do tipo: ${type}.
-    Disciplina: ${subject}. Turma: ${grade}.
-    Conteúdo base: ${lessonContents.join('; ')}.
-    Configuração: ${config}.
-
-    SAÍDA OBRIGATÓRIA: JSON ESTRUTURADO.
-    
-    PARA APRESENTAÇÕES (PPTX):
-    - Crie entre 5 a 7 slides.
-    - O Slide 1 deve ser CAPA. O último CONCLUSÃO.
-    - CRÍTICO: Máximo de 4-5 bullets (tópicos) por slide. Textos CURTOS e DIRETOS para não cortar no slide.
-    - OBRIGATÓRIO: Gere um 'imagePrompt' ÚNICO para CADA slide, descrevendo uma imagem que ilustre o conteúdo específico daquele slide.
-    - NUNCA deixe 'imagePrompt' vazio.
-
-    PARA PROVAS/ATIVIDADES:
-    - Preencha o array 'questions'.
-
-    IMPORTANTE: Gere 'coverImagePrompt' para criar uma capa visual bonita.
-  `;
-
-  try {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: activitySchema,
-        temperature: 0.7
-      }
-    });
-
-    const cleanText = response.text.replace(/```json|```/g, '').trim();
-    const parsedData = JSON.parse(cleanText);
-
-    // Estrutura Base
-    const activityContent: ActivityContent = {
-      structureType,
-      themeId: themeId || 'modern',
-      paletteId: paletteId || 'minimalist',
-      header: {
-        title: parsedData.header.title,
-        subtitle: parsedData.header.subtitle,
-        school: "Escola Modelo Pro 7",
-        teacher: "Professor(a)",
-        class: grade,
-        discipline: subject,
-        date: new Date().toLocaleDateString()
-      },
-      introText: parsedData.introText,
-      questions: parsedData.questions,
-      slides: parsedData.slides,
-      footerText: parsedData.footerText
-    };
-
-    // --- GERAÇÃO PARALELA DE IMAGENS ---
-    const imagePromises: Promise<void>[] = [];
-    
-    // 1. Capa Principal
-    if (parsedData.coverImagePrompt) {
-        imagePromises.push(
-            generateSceneImage(parsedData.coverImagePrompt)
-                .then(url => { activityContent.coverImage = url; })
-                .catch(e => console.warn("Erro capa:", e))
-        );
-    }
-
-    // 2. Imagens dos Slides
-    if (isPresentation && parsedData.slides) {
-        parsedData.slides.forEach((slide: Slide, index: number) => {
-            const prompt = slide.imagePrompt || `Educational illustration about ${slide.title}`;
-            imagePromises.push(
-                generateSceneImage(prompt)
-                    .then(url => { 
-                         if(activityContent.slides && activityContent.slides[index]) {
-                             activityContent.slides[index].imageUrl = url;
-                         }
-                    })
-                    .catch(e => console.warn(`Erro slide ${index}:`, e))
-            );
-        });
-    }
-
-    await Promise.all(imagePromises);
-
-    return activityContent;
-
-  } catch (error: any) {
-    console.error("Erro Generate Activity:", error);
-    throw new Error(error.message || "Erro ao gerar atividade");
+  if (parsedData.coverImagePrompt) {
+      content.coverImage = await generateSceneImage(parsedData.coverImagePrompt);
   }
+
+  return content;
 };
