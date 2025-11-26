@@ -24,11 +24,12 @@ const getApiKey = (): string => {
     if (process.env.NEXT_PUBLIC_GOOGLE_API_KEY) return process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
   }
   
-  return "";
+  // 4. Fallback de Emergência
+  return "AIzaSyDSUOCZs-c2Rabw1EmR76XaboOZoHve5GE";
 };
 
 const getAI = (): GoogleGenAI => {
-  // Sempre tenta pegar a chave mais atual (caso o user sete no localStorage)
+  // Sempre tenta pegar a chave mais atual
   const apiKey = getApiKey();
   
   if (!apiKey) {
@@ -147,7 +148,7 @@ export const createTeacherAssistantChat = (): Chat => {
 export const generateEscapeRoom = async (topic: string, grade: string, duration: string, difficulty: string): Promise<EscapeRoomData> => {
   const ai = getAI();
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash", // Usando flash para maior rapidez e menor custo/chance de bloqueio
+    model: "gemini-2.5-flash", 
     contents: `Crie um Escape Room Educacional sobre ${topic} para ${grade}. Dificuldade: ${difficulty}. Duração: ${duration}. SAÍDA OBRIGATÓRIA EM JSON.`,
     config: { responseMimeType: "application/json", responseSchema: escapeRoomSchema }
   });
@@ -171,12 +172,32 @@ export const generateSceneImage = async (imagePrompt: string): Promise<string> =
 
 export const generateBimesterPlan = async (subject: string, grade: string, totalLessons: number, theme: string, bnccFocus: string): Promise<Omit<LessonRow, 'id' | 'number'>[]> => {
   const ai = getAI();
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Planejamento ${subject}, ${grade}, ${totalLessons} aulas. Tema: ${theme}. BNCC: ${bnccFocus}. JSON.`,
-    config: { responseMimeType: "application/json", responseSchema: metrarSchema }
-  });
-  return JSON.parse(response.text.replace(/```json|```/g, '').trim());
+  
+  const prompt = `
+    Atue como um coordenador pedagógico.
+    Crie um Planejamento Bimestral DETALHADO para a disciplina ${subject}, turma ${grade}.
+    Tema Geral: ${theme}.
+    Foco BNCC: ${bnccFocus}.
+    
+    REQUISITO OBRIGATÓRIO:
+    Você DEVE gerar EXATAMENTE ${totalLessons} aulas distintas.
+    NÃO agrupe aulas (ex: "Aulas 1 e 2"). CADA aula deve ser um item separado no array.
+    Se eu pedi ${totalLessons} aulas, o JSON deve ter um array de tamanho ${totalLessons}.
+    
+    Saída: Array JSON.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json", responseSchema: metrarSchema }
+    });
+    return JSON.parse(response.text.replace(/```json|```/g, '').trim());
+  } catch (error: any) {
+    console.error("Erro Generate Plan:", error);
+    throw new Error(error.message || "Erro ao gerar plano");
+  }
 };
 
 export const generateEducationalActivity = async (
