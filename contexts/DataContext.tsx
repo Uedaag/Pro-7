@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   CalendarEvent,
@@ -36,11 +35,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- AUTHENTICATION ---
   const handleSessionChange = async (session: Session | null) => {
-    // Cenário 1: Sem sessão
     if (!session?.user) {
-      // Se ainda temos um ID na referência, significa que o logout aconteceu via evento externo ou token expirado
       if (currentUserIdRef.current !== null) {
-        console.log('[AUTH] Sessão encerrada, limpando dados.');
         currentUserIdRef.current = null;
         setCurrentUser(null);
         setEvents([]);
@@ -54,13 +50,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const user = session.user;
 
-    // Cenário 2: Sessão já carregada (previne loop)
     if (currentUserIdRef.current === user.id) {
       if (loading) setLoading(false);
       return;
     }
 
-    // Novo usuário detectado
     currentUserIdRef.current = user.id;
 
     const isAdmin = user.email?.toLowerCase().includes('admin') ?? false;
@@ -77,10 +71,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     try {
-      // Define estado inicial rápido
       setCurrentUser(baseUser);
 
-      // Busca perfil completo
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -104,7 +96,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(fullUser);
       } 
       
-      // Carrega dados
       await fetchAllData(user.id);
 
     } catch (e) {
@@ -140,9 +131,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // --- DATA FETCHING BLINDADO ---
+  // --- DATA FETCHING ---
   const fetchAllData = async (userId: string) => {
-    // 1. Agenda
     try {
       const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
       if (!error && data) {
@@ -152,7 +142,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) { console.error('Erro Agenda:', err); }
 
-    // 2. Planos
     try {
       const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId);
       if (!error && data) {
@@ -164,7 +153,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) { console.error('Erro Planos:', err); }
 
-    // 3. Turmas
     let loadedClasses: any[] = [];
     try {
       const { data, error } = await supabase.from('classes').select('*').eq('user_id', userId);
@@ -176,7 +164,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) { console.error('Erro Turmas:', err); }
 
-    // 4. Comunidade
     try {
       const { data, error } = await supabase.from('community').select('*').order('created_at', { ascending: false });
       if (!error && data) {
@@ -186,13 +173,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {}
 
-    // 5. Configurações
     try {
       const { data } = await supabase.from('configuracoes_sistema').select('*');
       if (data && data.length > 0) setSystemSettings(data as SystemSettings[]);
     } catch (err) {}
 
-    // 6. Atividades (Carregamento Tardio)
     try {
       if (loadedClasses.length > 0) {
         const classIds = loadedClasses.map((c) => c.id);
@@ -213,7 +198,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) { console.error('Erro Atividades:', err); }
 
-    // 7. Admin Users
     try {
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
         if (profile?.role === 'admin') {
@@ -288,10 +272,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addPlan = async (plan: BimesterPlan) => {
+    // Garante ID do usuário
     const { data: { user } } = await supabase.auth.getUser();
     const user_id = user?.id || currentUser?.id;
     if (!user_id) throw new Error("Usuário não autenticado.");
 
+    // Envia lessons direto como array (para coluna JSONB)
     const { data, error } = await supabase.from('plans').insert([{
         user_id: user_id,
         class_name: plan.className,
@@ -349,15 +335,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUser = async (u: User) => {
      const { error } = await supabase.from('profiles').update({
-         name: u.name, 
-         bio: u.bio, 
-         phone: u.phone, 
-         theme_preference: u.themePreference,
-         avatar_url: u.avatarUrl,
-         education: u.education,
-         expertise: u.expertise
+         name: u.name, bio: u.bio, phone: u.phone, theme_preference: u.themePreference,
+         avatar_url: u.avatarUrl, education: u.education, expertise: u.expertise
      }).eq('id', u.id);
-     
      if(!error) setCurrentUser(u);
      else throw new Error(error.message);
   };
