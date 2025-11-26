@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AuthForm } from './components/AuthForm';
 import { Sidebar } from './components/Sidebar';
@@ -9,7 +10,7 @@ import { ClassesView } from './components/ClassesView';
 import { ActivityGeneratorView } from './components/ActivityGeneratorView';
 import { AdminView } from './components/AdminView';
 import { CommunityView } from './components/CommunityView';
-import { VideosView } from './components/PlaceholderViews';
+import { VideosView } from './components/VideosView'; // Atualizado para o novo componente real
 import { ProfileView } from './components/ProfileView';
 import { AIChatAssistant } from './components/AIChatAssistant';
 import { User, View } from './types';
