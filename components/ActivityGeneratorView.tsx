@@ -1,16 +1,15 @@
-
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Save, Users, Calendar, Type, 
   CheckSquare, FileText, GraduationCap, Presentation, 
-  Palette, BrainCircuit, ChevronLeft, ArrowRight, CheckCircle
+  Palette, BrainCircuit, ChevronLeft, ArrowRight, BookOpen
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { generateEducationalActivity } from '../services/geminiService';
-import { ActivityContent, ActivityType, GeneratedActivity } from '../types';
+import { ActivityContent, ActivityType, GeneratedActivity, LessonRow } from '../types';
 
 export const ActivityGeneratorView: React.FC = () => {
-  const { classes, events, addActivity } = useData();
+  const { classes, events, plans, addActivity } = useData();
   
   // Estados de Navegação e Seleção
   const [step, setStep] = useState(1);
@@ -19,9 +18,13 @@ export const ActivityGeneratorView: React.FC = () => {
   
   // Dados do Formulário
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [knowledgeSource, setKnowledgeSource] = useState<'manual' | 'agenda'>('manual');
+  const [knowledgeSource, setKnowledgeSource] = useState<'manual' | 'agenda' | 'plans'>('manual');
+  
   const [manualTopic, setManualTopic] = useState('');
   const [selectedEventId, setSelectedEventId] = useState('');
+  const [selectedLessonIds, setSelectedLessonIds] = useState<string[]>([]); // IDs das aulas do plano
+  const [customInstructions, setCustomInstructions] = useState(''); // Instruções personalizadas
+
   const [selectedType, setSelectedType] = useState<ActivityType>('Prova');
   
   // Resultado
@@ -30,27 +33,43 @@ export const ActivityGeneratorView: React.FC = () => {
   // Helpers
   const currentClass = classes.find(c => c.id === selectedClassId);
   
-  // Filtra eventos da turma selecionada (ou todos se não tiver filtro estrito ainda)
+  // Filtra eventos da turma selecionada
   const classEvents = events
     .filter(e => e.classId === selectedClassId || !e.classId)
     .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
-    .slice(0, 5); // Pega os 5 mais recentes
+    .slice(0, 5);
+
+  // Filtra planos vinculados à turma
+  const linkedPlans = plans.filter(p => currentClass?.linkedPlanIds?.includes(p.id));
+
+  // Coleta todas as aulas de todos os planos vinculados para exibição
+  const allLinkedLessons = linkedPlans.flatMap(p => p.lessons.map(l => ({ ...l, planTheme: p.theme })));
 
   const handleGenerate = async () => {
     if (!currentClass) return;
     
     let topicToUse = '';
+    
     if (knowledgeSource === 'manual') {
         topicToUse = manualTopic;
-    } else {
+    } else if (knowledgeSource === 'agenda') {
         const evt = events.find(e => e.id === selectedEventId);
-        topicToUse = evt ? `${evt.title} - ${evt.description || ''}` : manualTopic;
+        topicToUse = evt ? `${evt.title} - ${evt.description || ''}` : '';
+    } else if (knowledgeSource === 'plans') {
+        const selectedLessons = allLinkedLessons.filter(l => selectedLessonIds.includes(l.id));
+        // Concatena o conteúdo das aulas selecionadas
+        topicToUse = selectedLessons.map(l => `Aula ${l.number} (${l.title}): ${l.content}`).join('; ');
     }
 
     if (!topicToUse) {
-        alert("Por favor, defina o tema ou selecione uma aula.");
+        alert("Por favor, defina o conteúdo para gerar a atividade.");
         return;
     }
+
+    // Adiciona as instruções personalizadas ao prompt
+    const finalConfig = customInstructions 
+        ? `Instruções adicionais do professor: ${customInstructions}.` 
+        : 'Padrão';
 
     setIsLoading(true);
     try {
@@ -59,7 +78,7 @@ export const ActivityGeneratorView: React.FC = () => {
           currentClass.subject, 
           currentClass.grade, 
           [topicToUse], 
-          'Padrão'
+          finalConfig
       );
       setResult(data);
     } catch (e: any) { 
@@ -89,11 +108,19 @@ export const ActivityGeneratorView: React.FC = () => {
         setStep(1);
         setManualTopic('');
         setSelectedEventId('');
+        setSelectedLessonIds([]);
+        setCustomInstructions('');
     } catch (e: any) { 
         alert("Erro ao salvar: " + e.message); 
     } finally { 
         setIsSaving(false); 
     }
+  };
+
+  const toggleLessonSelection = (id: string) => {
+      setSelectedLessonIds(prev => 
+          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
   };
 
   // Ícones para os tipos
@@ -292,7 +319,7 @@ export const ActivityGeneratorView: React.FC = () => {
                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${knowledgeSource === 'agenda' ? 'border-cyan-600' : 'border-slate-300'}`}>
                                  {knowledgeSource === 'agenda' && <div className="w-2.5 h-2.5 rounded-full bg-cyan-600"></div>}
                              </div>
-                             <span className="font-bold text-slate-800 dark:text-white uppercase text-xs tracking-wider">DA SUA AGENDA</span>
+                             <span className="font-bold text-slate-800 dark:text-white uppercase text-xs tracking-wider flex items-center gap-2"><Calendar size={16} /> Da Sua Agenda</span>
                          </div>
 
                          {knowledgeSource === 'agenda' && (
@@ -315,13 +342,69 @@ export const ActivityGeneratorView: React.FC = () => {
                                              </div>
                                              <div>
                                                  <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">{evt.title}</p>
-                                                 <p className="text-xs text-slate-400 flex items-center gap-1"><Calendar size={10}/> DATA: {new Date(evt.start).toLocaleDateString()}</p>
+                                                 <p className="text-xs text-slate-400 flex items-center gap-1"><Calendar size={10}/> {new Date(evt.start).toLocaleDateString()}</p>
                                              </div>
                                          </div>
                                      ))
                                  )}
                              </div>
                          )}
+                     </div>
+
+                     {/* Opção Planos de Aula Vinculados */}
+                     <div 
+                        className={`p-6 rounded-2xl border-2 transition-all cursor-pointer
+                            ${knowledgeSource === 'plans' ? 'border-cyan-500 bg-cyan-50/30 dark:bg-cyan-900/10' : 'border-slate-200 dark:border-white/10'}
+                        `}
+                        onClick={() => setKnowledgeSource('plans')}
+                     >
+                         <div className="flex items-center gap-3 mb-4">
+                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${knowledgeSource === 'plans' ? 'border-cyan-600' : 'border-slate-300'}`}>
+                                 {knowledgeSource === 'plans' && <div className="w-2.5 h-2.5 rounded-full bg-cyan-600"></div>}
+                             </div>
+                             <span className="font-bold text-slate-800 dark:text-white uppercase text-xs tracking-wider flex items-center gap-2"><BookOpen size={16} /> De Planos Vinculados</span>
+                         </div>
+
+                         {knowledgeSource === 'plans' && (
+                             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                 {allLinkedLessons.length === 0 ? (
+                                     <p className="text-sm text-slate-400 italic p-2">Nenhum plano de aula vinculado a esta turma.</p>
+                                 ) : (
+                                     allLinkedLessons.map(lesson => (
+                                         <div 
+                                            key={lesson.id}
+                                            onClick={(e) => { e.stopPropagation(); toggleLessonSelection(lesson.id); }}
+                                            className={`p-3 rounded-lg border flex items-start gap-3 transition-all hover:bg-white dark:hover:bg-white/5 cursor-pointer
+                                                ${selectedLessonIds.includes(lesson.id) 
+                                                    ? 'border-cyan-500 bg-white dark:bg-white/5' 
+                                                    : 'border-transparent hover:border-slate-200'}
+                                            `}
+                                         >
+                                             <div className={`w-4 h-4 rounded border flex items-center justify-center mt-1 ${selectedLessonIds.includes(lesson.id) ? 'bg-cyan-600 border-cyan-600' : 'border-slate-300'}`}>
+                                                 {selectedLessonIds.includes(lesson.id) && <CheckSquare size={10} className="text-white" />}
+                                             </div>
+                                             <div>
+                                                 <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">Aula {lesson.number}: {lesson.title}</p>
+                                                 <p className="text-xs text-slate-400">{lesson.planTheme}</p>
+                                                 <p className="text-xs text-slate-500 mt-1 line-clamp-2">{lesson.content}</p>
+                                             </div>
+                                         </div>
+                                     ))
+                                 )}
+                             </div>
+                         )}
+                     </div>
+
+                     {/* Campo de Instruções Personalizadas */}
+                     <div className="pt-4 border-t border-slate-200 dark:border-white/10">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Instruções Personalizadas (Opcional)</label>
+                        <textarea 
+                            value={customInstructions}
+                            onChange={(e) => setCustomInstructions(e.target.value)}
+                            placeholder="Ex: Quero 5 questões de múltipla escolha e 3 dissertativas. Foque em análise crítica."
+                            className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-500 text-sm text-slate-800 dark:text-white resize-none"
+                            rows={3}
+                        />
                      </div>
                  </div>
              </div>
@@ -380,6 +463,7 @@ export const ActivityGeneratorView: React.FC = () => {
                         if (step === 1 && !selectedClassId) return alert("Selecione uma turma.");
                         if (step === 2 && knowledgeSource === 'manual' && !manualTopic) return alert("Digite um tema.");
                         if (step === 2 && knowledgeSource === 'agenda' && !selectedEventId) return alert("Selecione uma aula da agenda.");
+                        if (step === 2 && knowledgeSource === 'plans' && selectedLessonIds.length === 0) return alert("Selecione pelo menos uma aula do plano.");
                         setStep(prev => prev + 1);
                     }}
                     className="bg-cyan-400 hover:bg-cyan-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
@@ -402,4 +486,3 @@ export const ActivityGeneratorView: React.FC = () => {
     </div>
   );
 };
-    

@@ -94,13 +94,16 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
 };
 
 const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNavigate?: (view: View) => void }> = ({ classRoom, onBack, onNavigate }) => {
-  const { events } = useData();
+  const { events, plans } = useData();
   const [activeTab, setActiveTab] = useState<'aulas' | 'planos' | 'atividades'>('aulas');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
 
   const classEvents = events
     .filter(evt => evt.classId === classRoom.id)
     .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+
+  // Planos vinculados
+  const linkedPlans = plans.filter(p => classRoom.linkedPlanIds?.includes(p.id));
 
   return (
     <div className="max-w-6xl mx-auto pb-20 animate-fade-in">
@@ -145,6 +148,43 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
                     </div>
                  )}
               </div>
+            )}
+
+            {activeTab === 'planos' && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-slate-700">Planos de Aula Vinculados</h3>
+                        <button onClick={() => onNavigate?.('lesson-plans')} className="text-purple-600 text-xs font-bold hover:underline flex items-center gap-1">Ir para Biblioteca</button>
+                    </div>
+                    {linkedPlans.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p>Nenhum plano vinculado a esta turma.</p></div>
+                    ) : (
+                        <div className="space-y-4">
+                            {linkedPlans.map(plan => (
+                                <div key={plan.id} className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h4 className="font-bold text-lg text-slate-800">{plan.theme}</h4>
+                                            <p className="text-sm text-slate-500">{plan.bimester} • {plan.totalLessons} Aulas</p>
+                                        </div>
+                                        <span className="bg-white px-3 py-1 rounded-full text-xs font-bold border border-slate-200">Vinculado</span>
+                                    </div>
+                                    
+                                    {/* Lesson Preview */}
+                                    <div className="space-y-2 mt-4">
+                                        <p className="text-xs font-bold text-slate-400 uppercase">Conteúdo das Aulas</p>
+                                        {plan.lessons.map(l => (
+                                            <div key={l.id} className="flex gap-3 items-center text-sm text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                                <span className="font-mono font-bold text-purple-600 w-6 text-center">{l.number}</span>
+                                                <span className="truncate">{l.title}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
 
             {activeTab === 'atividades' && (

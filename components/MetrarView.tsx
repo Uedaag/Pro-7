@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Folder, Plus, Edit3, Trash2, Save, X, 
-  BookOpen, CheckCircle, List, Table as TableIcon, Eye, AlertTriangle
+  BookOpen, CheckCircle, List, Table as TableIcon, Eye, AlertTriangle, Link as LinkIcon
 } from 'lucide-react';
 import { BimesterPlan, LessonRow, User } from '../types';
 import { generateBimesterPlan } from '../services/geminiService';
 import { useData } from '../contexts/DataContext';
 
 export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
-  const { plans, addPlan, deletePlan } = useData();
+  const { plans, classes, addPlan, deletePlan, linkPlanToClass } = useData();
   const [activeTab, setActiveTab] = useState<'generator' | 'library'>('generator');
   
   // States do Gerador
@@ -18,6 +18,8 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
   
   // States da Biblioteca
   const [selectedStoredPlan, setSelectedStoredPlan] = useState<BimesterPlan | null>(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [planToLink, setPlanToLink] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     className: '', 
@@ -97,6 +99,24 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
         await deletePlan(id);
         if (selectedStoredPlan?.id === id) setSelectedStoredPlan(null);
     }
+  };
+
+  const openLinkModal = (planId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setPlanToLink(planId);
+      setIsLinkModalOpen(true);
+  };
+
+  const handleLinkClass = async (classId: string) => {
+      if (!planToLink) return;
+      try {
+          await linkPlanToClass(planToLink, classId);
+          alert("Plano vinculado à turma com sucesso!");
+          setIsLinkModalOpen(false);
+          setPlanToLink(null);
+      } catch (e: any) {
+          alert("Erro ao vincular: " + e.message);
+      }
   };
 
   return (
@@ -244,7 +264,10 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                 <div key={plan.id} onClick={() => setSelectedStoredPlan(plan)} className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md hover:border-cyan-300 dark:hover:border-cyan-700 transition-all cursor-pointer group relative">
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 rounded-xl group-hover:bg-cyan-600 group-hover:text-white transition-colors"><List size={24} /></div>
-                    <button onClick={(e) => handleDelete(plan.id, e)} className="p-2 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={18} /></button>
+                    <div className="flex gap-2">
+                        <button onClick={(e) => openLinkModal(plan.id, e)} className="p-2 text-slate-300 hover:text-cyan-500 transition-colors rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-900/20" title="Vincular a Turma"><LinkIcon size={18} /></button>
+                        <button onClick={(e) => handleDelete(plan.id, e)} className="p-2 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={18} /></button>
+                    </div>
                   </div>
                   <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-1 line-clamp-1">{plan.theme}</h3>
                   <p className="text-sm text-cyan-600 dark:text-cyan-400 font-bold mb-4">{plan.subject}</p>
@@ -262,6 +285,34 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Modal de Vinculação */}
+      {isLinkModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
+                  <button onClick={() => setIsLinkModalOpen(false)} className="absolute top-4 right-4 text-slate-400"><X size={20}/></button>
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Vincular à Turma</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Selecione a turma para associar este plano de aula. Isso permitirá gerar atividades baseadas neste conteúdo.</p>
+                  
+                  {classes.length > 0 ? (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {classes.map(c => (
+                              <button 
+                                key={c.id} 
+                                onClick={() => handleLinkClass(c.id)}
+                                className="w-full text-left p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-all"
+                              >
+                                  <h4 className="font-bold text-slate-800 dark:text-white">{c.name}</h4>
+                                  <p className="text-xs text-slate-500">{c.grade} • {c.subject}</p>
+                              </button>
+                          ))}
+                      </div>
+                  ) : (
+                      <p className="text-center text-slate-400">Nenhuma turma cadastrada.</p>
+                  )}
+              </div>
+          </div>
       )}
 
       {/* Modal de Detalhes */}
