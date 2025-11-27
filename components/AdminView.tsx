@@ -39,7 +39,6 @@ export const AdminView: React.FC = () => {
     }
   }, [systemSettings]);
 
-
   const totalUsers = users.length;
   const activeUsers = users.filter(u => u.status === 'approved').length;
   const premiumUsers = users.filter(u => u.plan === 'premium').length;
@@ -160,37 +159,18 @@ export const AdminView: React.FC = () => {
                        <AlertTriangle size={18} />
                        Você tem alterações pendentes ({modifiedUsers.size}).
                    </div>
-                   <button 
-                     onClick={handleSaveUsers}
-                     disabled={isSavingUsers}
-                     className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-md"
-                   >
-                       <Save size={14} />
-                       {isSavingUsers ? 'Salvando...' : 'Salvar Alterações'}
-                   </button>
+                   <button onClick={handleSaveUsers} disabled={isSavingUsers} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shadow-md"><Save size={14} />{isSavingUsers ? 'Salvando...' : 'Salvar Alterações'}</button>
                </div>
            )}
 
            <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center bg-slate-50">
               <div className="relative w-full md:w-96">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                 <input 
-                   type="text" 
-                   placeholder="Buscar professor por nome ou email..."
-                   className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-cyan-500"
-                   value={searchTerm}
-                   onChange={(e) => setSearchTerm(e.target.value)}
-                 />
+                 <input type="text" placeholder="Buscar professor por nome ou email..." className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-cyan-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
               </div>
               <div className="flex gap-2">
                  {(['all', 'pending', 'premium', 'blocked'] as const).map(f => (
-                   <button 
-                     key={f}
-                     onClick={() => setFilter(f)}
-                     className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${filter === f ? 'bg-slate-800 text-white' : 'bg-white border border-slate-300 text-slate-500 hover:bg-slate-100'}`}
-                   >
-                     {f === 'all' ? 'Todos' : f}
-                   </button>
+                   <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${filter === f ? 'bg-slate-800 text-white' : 'bg-white border border-slate-300 text-slate-500 hover:bg-slate-100'}`}>{f === 'all' ? 'Todos' : f}</button>
                  ))}
               </div>
            </div>
@@ -214,46 +194,25 @@ export const AdminView: React.FC = () => {
                      <td className="px-6 py-4">
                        <div className="flex items-center gap-3">
                          {isModified && <div className="w-2 h-2 rounded-full bg-amber-500"></div>}
-                         <div>
-                            <p className="font-bold text-slate-800">{u.name}</p>
-                            <p className="text-xs text-slate-500">{u.email}</p>
-                         </div>
+                         <div><p className="font-bold text-slate-800">{u.name}</p><p className="text-xs text-slate-500">{u.email}</p></div>
                        </div>
                      </td>
                      <td className="px-6 py-4">
-                        <select 
-                           value={u.status}
-                           onChange={(e) => handleLocalUserChange(u.id, { status: e.target.value as any })}
-                           className={`px-2 py-1 rounded text-xs font-bold border outline-none cursor-pointer
-                             ${u.status === 'approved' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 
-                               u.status === 'blocked' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}
-                           `}
-                        >
+                        <select value={u.status} onChange={(e) => handleLocalUserChange(u.id, { status: e.target.value as any })} className={`px-2 py-1 rounded text-xs font-bold border outline-none cursor-pointer ${u.status === 'approved' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : u.status === 'blocked' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>
                            <option value="pending">Pendente</option>
                            <option value="approved">Aprovado</option>
                            <option value="blocked">Bloqueado</option>
                         </select>
                      </td>
                      <td className="px-6 py-4">
-                        <select 
-                           value={u.plan}
-                           onChange={(e) => handleLocalUserChange(u.id, { plan: e.target.value as any })}
-                           className={`px-2 py-1 rounded text-xs font-bold border outline-none cursor-pointer flex items-center gap-2
-                             ${u.plan === 'premium' ? 'bg-amber-100 text-amber-600 border-amber-200' : 
-                               'bg-slate-100 text-slate-500 border-slate-200'}
-                           `}
-                        >
+                        <select value={u.plan} onChange={(e) => handleLocalUserChange(u.id, { plan: e.target.value as any })} className={`px-2 py-1 rounded text-xs font-bold border outline-none cursor-pointer flex items-center gap-2 ${u.plan === 'premium' ? 'bg-amber-100 text-amber-600 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                            <option value="free">Gratuito</option>
                            <option value="premium">Premium</option>
                         </select>
                      </td>
-                     <td className="px-6 py-4 text-sm text-slate-500">
-                       {new Date(u.joinedAt).toLocaleDateString()}
-                     </td>
+                     <td className="px-6 py-4 text-sm text-slate-500">{new Date(u.joinedAt).toLocaleDateString()}</td>
                      <td className="px-6 py-4 text-right flex justify-end gap-2">
-                       <button onClick={() => deleteUser(u.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Excluir Usuário">
-                         <Trash2 size={16} />
-                       </button>
+                       <button onClick={() => deleteUser(u.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Excluir Usuário"><Trash2 size={16} /></button>
                      </td>
                    </tr>
                  )})}
@@ -266,78 +225,19 @@ export const AdminView: React.FC = () => {
       {activeTab === 'settings' && (
         <div className="space-y-6 animate-slide-in-from-bottom-4">
            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">Configurações Gerais do Sistema</h2>
-                <p className="text-sm text-slate-500">Defina quais recursos cada plano pode acessar.</p>
-              </div>
-              <button 
-                onClick={handleSaveSettings}
-                disabled={isSavingSettings}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-transform hover:-translate-y-0.5"
-              >
-                 <Save size={20} /> {isSavingSettings ? 'Salvando...' : 'Salvar Configurações'}
-              </button>
+              <div><h2 className="text-xl font-bold text-slate-800">Configurações Gerais do Sistema</h2><p className="text-sm text-slate-500">Defina quais recursos cada plano pode acessar.</p></div>
+              <button onClick={handleSaveSettings} disabled={isSavingSettings} className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-transform hover:-translate-y-0.5"><Save size={20} /> {isSavingSettings ? 'Salvando...' : 'Salvar Configurações'}</button>
            </div>
-
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {localSettings.map((setting) => (
-                <div key={setting.plan} className={`
-                    rounded-2xl border-2 p-6 bg-white relative overflow-hidden
-                    ${setting.plan === 'premium' ? 'border-amber-400' : 'border-slate-200'}
-                `}>
-                    
-                    <h3 className={`text-2xl font-black uppercase mb-6 flex items-center gap-2
-                       ${setting.plan === 'premium' ? 'text-amber-600' : 'text-slate-600'}
-                    `}>
-                        {setting.plan === 'premium' && <Crown size={24}/>}
-                        Plano {setting.plan}
-                    </h3>
-
+                <div key={setting.plan} className={`rounded-2xl border-2 p-6 bg-white relative overflow-hidden ${setting.plan === 'premium' ? 'border-amber-400' : 'border-slate-200'}`}>
+                    <h3 className={`text-2xl font-black uppercase mb-6 flex items-center gap-2 ${setting.plan === 'premium' ? 'text-amber-600' : 'text-slate-600'}`}>{setting.plan === 'premium' && <Crown size={24}/>} Plano {setting.plan}</h3>
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                               <BrainCircuit size={16} className="text-purple-500"/> Inteligência Artificial
-                            </div>
-                            <button onClick={() => handleSettingChange(setting.plan, 'can_use_ia')} className="text-slate-400 hover:text-cyan-600">
-                                {setting.can_use_ia ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                               <Gamepad2 size={16} className="text-cyan-500"/> Edu Escape
-                            </div>
-                            <button onClick={() => handleSettingChange(setting.plan, 'can_access_escape')} className="text-slate-400 hover:text-cyan-600">
-                                {setting.can_access_escape ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                               <Users size={16} className="text-blue-500"/> Criar Turmas
-                            </div>
-                            <button onClick={() => handleSettingChange(setting.plan, 'can_create_classes')} className="text-slate-400 hover:text-cyan-600">
-                                {setting.can_create_classes ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                               <Video size={16} className="text-red-500"/> Vídeos
-                            </div>
-                            <button onClick={() => handleSettingChange(setting.plan, 'can_access_videos')} className="text-slate-400 hover:text-cyan-600">
-                                {setting.can_access_videos ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}
-                            </button>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                               <FileText size={16} className="text-orange-500"/> Exportar PDF
-                            </div>
-                            <button onClick={() => handleSettingChange(setting.plan, 'can_export_pdf')} className="text-slate-400 hover:text-cyan-600">
-                                {setting.can_export_pdf ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}
-                            </button>
-                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"><div className="flex items-center gap-2 text-sm font-bold text-slate-700"><BrainCircuit size={16} className="text-purple-500"/> Inteligência Artificial</div><button onClick={() => handleSettingChange(setting.plan, 'can_use_ia')} className="text-slate-400 hover:text-cyan-600">{setting.can_use_ia ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}</button></div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"><div className="flex items-center gap-2 text-sm font-bold text-slate-700"><Gamepad2 size={16} className="text-cyan-500"/> Edu Escape</div><button onClick={() => handleSettingChange(setting.plan, 'can_access_escape')} className="text-slate-400 hover:text-cyan-600">{setting.can_access_escape ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}</button></div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"><div className="flex items-center gap-2 text-sm font-bold text-slate-700"><Users size={16} className="text-blue-500"/> Criar Turmas</div><button onClick={() => handleSettingChange(setting.plan, 'can_create_classes')} className="text-slate-400 hover:text-cyan-600">{setting.can_create_classes ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}</button></div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"><div className="flex items-center gap-2 text-sm font-bold text-slate-700"><Video size={16} className="text-red-500"/> Vídeos</div><button onClick={() => handleSettingChange(setting.plan, 'can_access_videos')} className="text-slate-400 hover:text-cyan-600">{setting.can_access_videos ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}</button></div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"><div className="flex items-center gap-2 text-sm font-bold text-slate-700"><FileText size={16} className="text-orange-500"/> Exportar PDF</div><button onClick={() => handleSettingChange(setting.plan, 'can_export_pdf')} className="text-slate-400 hover:text-cyan-600">{setting.can_export_pdf ? <ToggleRight size={32} className="text-emerald-500"/> : <ToggleLeft size={32}/>}</button></div>
                     </div>
                 </div>
               ))}

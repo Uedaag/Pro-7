@@ -283,8 +283,8 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
             <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Excluir Evento?</h3>
             <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Tem certeza que deseja remover este conteúdo da sua agenda? Esta ação não pode ser desfeita.</p>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Cancelar</button>
-              <button onClick={handleConfirmDelete} className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-500/20 transition-transform hover:-translate-y-0.5">Sim, Excluir</button>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Cancelar</button>
+              <button onClick={handleConfirmDelete} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-500/20 transition-transform hover:-translate-y-0.5">Sim, Excluir</button>
             </div>
           </div>
         </div>

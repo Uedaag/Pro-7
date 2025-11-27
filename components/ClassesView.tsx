@@ -265,109 +265,37 @@ const PlanManagerModal: React.FC<{ plan: BimesterPlan; onClose: () => void; }> =
 const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNavigate?: (view: View) => void }> = ({ classRoom, onBack, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'grades' | 'activities' | 'aulas' | 'planos'>('aulas');
   const { classes, events, plans } = useData();
-  const { notify } = useNotification();
   const currentClass = classes.find(c => c.id === classRoom.id) || classRoom;
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
   const [editingPlan, setEditingPlan] = useState<BimesterPlan | null>(null);
 
-  const classEvents = events
-    .filter(evt => evt.classId === classRoom.id)
-    .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+  const classEvents = events.filter(evt => evt.classId === classRoom.id).sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
   const linkedPlans = plans.filter(p => classRoom.linkedPlanIds?.includes(p.id));
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-          <ChevronLeft size={24} className="text-slate-500" />
-        </button>
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">{currentClass.name}</h2>
-          <p className="text-slate-500 text-sm">{currentClass.grade} • {currentClass.subject} • {currentClass.shift}</p>
-        </div>
+        <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><ChevronLeft size={24} className="text-slate-500" /></button>
+        <div><h2 className="text-2xl font-bold text-slate-800 dark:text-white">{currentClass.name}</h2><p className="text-slate-500 text-sm">{currentClass.grade} • {currentClass.subject} • {currentClass.shift}</p></div>
       </div>
-
       <div className="flex border-b border-slate-200 dark:border-white/10 mb-6 overflow-x-auto">
-        {[
-            { id: 'aulas', label: 'Aulas', icon: CalendarIcon },
-            { id: 'planos', label: 'Planos', icon: BookOpen },
-            { id: 'atividades', label: 'Atividades (IA)', icon: FileText },
-            { id: 'grades', label: 'Notas', icon: GraduationCap }
-        ].map(tab => (
-            <button 
-               key={tab.id}
-               onClick={() => setActiveTab(tab.id as any)}
-               className={`flex items-center gap-2 px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-               <tab.icon size={18}/> {tab.label}
-            </button>
+        {[{ id: 'aulas', label: 'Aulas', icon: CalendarIcon }, { id: 'planos', label: 'Planos', icon: BookOpen }, { id: 'atividades', label: 'Atividades (IA)', icon: FileText }, { id: 'grades', label: 'Notas', icon: GraduationCap }].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-6 py-3 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><tab.icon size={18}/> {tab.label}</button>
         ))}
       </div>
-
       {activeTab === 'grades' && <GradesTab classId={currentClass.id} />}
-      
       {activeTab === 'aulas' && (
           <div className="space-y-6">
-             <div className="flex justify-between items-center">
-                <h3 className="font-bold text-slate-700">Cronograma da Turma</h3>
-                <button onClick={() => onNavigate?.('agenda')} className="text-purple-600 text-xs font-bold hover:underline flex items-center gap-1"><Plus size={14}/> Agendar na Agenda</button>
-             </div>
-             {classEvents.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p>Nenhuma aula vinculada.</p></div>
-             ) : (
-                <div className="space-y-3">
-                   {classEvents.map(evt => (
-                      <div key={evt.id} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-                          <div className="flex flex-col items-center justify-center w-14 h-14 bg-slate-50 rounded-lg text-slate-600 shrink-0">
-                              <span className="text-[10px] font-bold uppercase">{new Date(evt.start).toLocaleDateString('pt-BR', {weekday: 'short'})}</span>
-                              <span className="text-lg font-black">{new Date(evt.start).getDate()}</span>
-                          </div>
-                          <div>
-                              <h4 className="font-bold text-slate-800">{evt.title}</h4>
-                              <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12}/> {new Date(evt.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                          </div>
-                      </div>
-                   ))}
-                </div>
-             )}
+             <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700">Cronograma da Turma</h3><button onClick={() => onNavigate?.('agenda')} className="text-purple-600 text-xs font-bold hover:underline flex items-center gap-1"><Plus size={14}/> Agendar na Agenda</button></div>
+             {classEvents.length === 0 ? (<div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p>Nenhuma aula vinculada.</p></div>) : (<div className="space-y-3">{classEvents.map(evt => (<div key={evt.id} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-sm"><div className="flex flex-col items-center justify-center w-14 h-14 bg-slate-50 rounded-lg text-slate-600 shrink-0"><span className="text-[10px] font-bold uppercase">{new Date(evt.start).toLocaleDateString('pt-BR', {weekday: 'short'})}</span><span className="text-lg font-black">{new Date(evt.start).getDate()}</span></div><div><h4 className="font-bold text-slate-800">{evt.title}</h4><span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12}/> {new Date(evt.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div></div>))}</div>)}
           </div>
       )}
-
       {activeTab === 'planos' && (
           <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-slate-700">Planos de Aula Vinculados</h3>
-                  <button onClick={() => onNavigate?.('lesson-plans')} className="text-purple-600 text-xs font-bold hover:underline flex items-center gap-1">Ir para Biblioteca</button>
-              </div>
-              {linkedPlans.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p>Nenhum plano vinculado a esta turma.</p></div>
-              ) : (
-                  <div className="space-y-4">
-                      {linkedPlans.map(plan => (
-                          <div key={plan.id} className="bg-slate-50 p-6 rounded-xl border border-slate-200 group">
-                              <div className="flex justify-between items-start mb-4">
-                                  <div><h4 className="font-bold text-lg text-slate-800">{plan.theme}</h4><p className="text-sm text-slate-500">{plan.bimester} • {plan.totalLessons} Aulas</p></div>
-                                  <div className="flex items-center gap-2">
-                                      <span className="bg-white px-3 py-1 rounded-full text-xs font-bold border border-slate-200 text-slate-500">Vinculado</span>
-                                      <button onClick={() => setEditingPlan(plan)} className="bg-white text-purple-600 px-3 py-1 rounded-full text-xs font-bold border border-purple-200 hover:bg-purple-50 transition-colors shadow-sm">Gerenciar Conteúdo</button>
-                                  </div>
-                              </div>
-                              <div className="space-y-2 mt-4">
-                                  <p className="text-xs font-bold text-slate-400 uppercase">Conteúdo das Aulas (Resumo)</p>
-                                  {plan.lessons.slice(0, 3).map(l => (
-                                      <div key={l.id} className="flex gap-3 items-center text-sm text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                          <span className="font-mono font-bold text-purple-600 w-6 text-center">{l.number}</span><span className="truncate">{l.title}</span>
-                                      </div>
-                                  ))}
-                                  {plan.lessons.length > 3 && <p className="text-xs text-slate-400 pl-2 pt-1 italic">+ {plan.lessons.length - 3} aulas...</p>}
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              )}
+              <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700">Planos de Aula Vinculados</h3><button onClick={() => onNavigate?.('lesson-plans')} className="text-purple-600 text-xs font-bold hover:underline flex items-center gap-1">Ir para Biblioteca</button></div>
+              {linkedPlans.length === 0 ? (<div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p>Nenhum plano vinculado a esta turma.</p></div>) : (<div className="space-y-4">{linkedPlans.map(plan => (<div key={plan.id} className="bg-slate-50 p-6 rounded-xl border border-slate-200 group"><div className="flex justify-between items-start mb-4"><div><h4 className="font-bold text-lg text-slate-800">{plan.theme}</h4><p className="text-sm text-slate-500">{plan.bimester} • {plan.totalLessons} Aulas</p></div><div className="flex items-center gap-2"><span className="bg-white px-3 py-1 rounded-full text-xs font-bold border border-slate-200 text-slate-500">Vinculado</span><button onClick={() => setEditingPlan(plan)} className="bg-white text-purple-600 px-3 py-1 rounded-full text-xs font-bold border border-purple-200 hover:bg-purple-50 transition-colors shadow-sm">Gerenciar Conteúdo</button></div></div><div className="space-y-2 mt-4"><p className="text-xs font-bold text-slate-400 uppercase">Conteúdo das Aulas (Resumo)</p>{plan.lessons.slice(0, 3).map(l => (<div key={l.id} className="flex gap-3 items-center text-sm text-slate-600 bg-white p-2 rounded border border-slate-100"><span className="font-mono font-bold text-purple-600 w-6 text-center">{l.number}</span><span className="truncate">{l.title}</span></div>))}{plan.lessons.length > 3 && <p className="text-xs text-slate-400 pl-2 pt-1 italic">+ {plan.lessons.length - 3} aulas...</p>}</div></div>))}</div>)}
           </div>
       )}
-
       {activeTab === 'activities' && (
         <div>
            {currentClass.generatedActivities && currentClass.generatedActivities.length > 0 ? (
@@ -380,17 +308,10 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
                   </div>
                 ))}
              </div>
-           ) : (
-             <div className="text-center py-10 text-slate-400">
-               <p>Nenhuma atividade encontrada.</p>
-               <button onClick={() => onNavigate?.('activity-generator')} className="text-purple-600 font-bold hover:underline mt-2">Criar Atividade</button>
-             </div>
-           )}
+           ) : (<div className="text-center py-10 text-slate-400"><p>Nenhuma atividade encontrada.</p><button onClick={() => onNavigate?.('activity-generator')} className="text-purple-600 font-bold hover:underline mt-2">Criar Atividade</button></div>)}
         </div>
       )}
-
       {editingPlan && <PlanManagerModal plan={editingPlan} onClose={() => setEditingPlan(null)} />}
-      
       {selectedActivity && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
            <div className="bg-white w-full max-w-3xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
@@ -418,42 +339,15 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
     setIsSubmitting(true);
     const form = e.currentTarget as HTMLFormElement;
     const formData = new FormData(form);
-    const newClass: any = {
-      name: formData.get('name') as string,
-      grade: formData.get('grade') as string,
-      subject: formData.get('subject') as string,
-      shift: formData.get('shift') as string,
-      studentsCount: 0
-    };
-
-    try {
-      await addClass(newClass);
-      notify("Turma criada com sucesso!", "success");
-      setIsCreateModalOpen(false);
-      form.reset();
-    } catch (error: any) {
-      let msg = error.message || "Erro desconhecido";
-      if (msg.includes("studentsCount")) msg = "Erro de banco de dados (Coluna faltando). Contate o suporte.";
-      notify(msg, "error");
-    } finally {
-      setIsSubmitting(false);
-    }
+    const newClass: any = { name: formData.get('name') as string, grade: formData.get('grade') as string, subject: formData.get('subject') as string, shift: formData.get('shift') as string, studentsCount: 0 };
+    try { await addClass(newClass); notify("Turma criada com sucesso!", "success"); setIsCreateModalOpen(false); form.reset(); } catch (error: any) { let msg = error.message || "Erro desconhecido"; if (msg.includes("studentsCount")) msg = "Erro de banco de dados (Coluna faltando). Contate o suporte."; notify(msg, "error"); } finally { setIsSubmitting(false); }
   };
 
   const confirmDeleteClass = async () => {
-    if (classToDelete) {
-        try {
-            await deleteClass(classToDelete);
-            if (selectedClass?.id === classToDelete) { setSelectedClass(null); setViewMode('list'); }
-            notify("Turma excluída com sucesso.", "success");
-        } catch (error: any) { notify("Erro ao excluir a turma. Tente novamente.", "error"); }
-        setClassToDelete(null);
-    }
+    if (classToDelete) { try { await deleteClass(classToDelete); if (selectedClass?.id === classToDelete) { setSelectedClass(null); setViewMode('list'); } notify("Turma excluída com sucesso.", "success"); } catch (error: any) { notify("Erro ao excluir a turma. Tente novamente.", "error"); } setClassToDelete(null); }
   };
 
-  if (viewMode === 'detail' && selectedClass) {
-    return <ClassDetailView classRoom={selectedClass} onBack={() => { setSelectedClass(null); setViewMode('list'); }} onNavigate={onNavigate} />;
-  }
+  if (viewMode === 'detail' && selectedClass) { return <ClassDetailView classRoom={selectedClass} onBack={() => { setSelectedClass(null); setViewMode('list'); }} onNavigate={onNavigate} />; }
 
   return (
     <div className="max-w-7xl mx-auto pb-20 animate-fade-in">
@@ -461,20 +355,14 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
         <div><h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Users className="text-purple-600" /> Minhas Turmas</h1><p className="text-slate-500 text-sm mt-1">Gerencie aulas, alunos e conteúdos por sala.</p></div>
         <button onClick={() => setIsCreateModalOpen(true)} className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-transform hover:-translate-y-0.5"><Plus size={20} /> Adicionar Nova Turma</button>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {classes.map(cls => (
           <div key={cls.id} onClick={() => { setSelectedClass(cls); setViewMode('detail'); }} className="bg-white dark:bg-[#0f172a] p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md transition-all cursor-pointer group relative">
-             <div className="flex justify-between items-start mb-4">
-              <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:text-purple-600"><Users size={24} /></div>
-              <button onClick={(e) => { e.stopPropagation(); setClassToDelete(cls.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-            </div>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-1">{cls.name}</h3>
-            <p className="text-sm text-slate-500 font-medium mb-4">{cls.grade} • {cls.subject}</p>
+             <div className="flex justify-between items-start mb-4"><div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:text-purple-600"><Users size={24} /></div><button onClick={(e) => { e.stopPropagation(); setClassToDelete(cls.id); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-1">{cls.name}</h3><p className="text-sm text-slate-500 font-medium mb-4">{cls.grade} • {cls.subject}</p>
           </div>
         ))}
       </div>
-
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-2xl shadow-2xl p-8 relative animate-scale-in border border-slate-200 dark:border-white/10">
@@ -490,7 +378,6 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
           </div>
         </div>
       )}
-
       {classToDelete && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-[#0f172a] w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center animate-scale-in border border-slate-200 dark:border-white/10">
