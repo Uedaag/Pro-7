@@ -47,7 +47,6 @@ export const GamesContainer: React.FC = () => {
     <div className="max-w-5xl mx-auto animate-fade-in">
       {!data ? (
         <div className="flex flex-col items-center justify-center min-h-[60vh] relative z-10">
-           {/* Hero Text */}
           <div className="text-center mb-12 space-y-6">
             <h1 className="text-4xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">
               GERADOR DE <br />
@@ -72,7 +71,6 @@ export const GamesContainer: React.FC = () => {
 
           <InputForm onSubmit={handleGenerate} isLoading={isLoading} />
 
-          {/* Features Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16 w-full border-t border-slate-200 dark:border-white/5 pt-12">
             <div className="p-6 rounded-2xl bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/5 shadow-sm hover:shadow-md transition-all text-left group">
               <div className="w-10 h-10 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4 group-hover:scale-110 transition-transform">
