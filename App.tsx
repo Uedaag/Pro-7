@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AuthForm } from './components/AuthForm';
 import { Sidebar } from './components/Sidebar';
@@ -10,11 +9,12 @@ import { ClassesView } from './components/ClassesView';
 import { ActivityGeneratorView } from './components/ActivityGeneratorView';
 import { AdminView } from './components/AdminView';
 import { CommunityView } from './components/CommunityView';
-import { VideosView } from './components/VideosView'; // Atualizado para o novo componente real
+import { VideosView } from './components/VideosView';
 import { ProfileView } from './components/ProfileView';
 import { AIChatAssistant } from './components/AIChatAssistant';
 import { User, View } from './types';
 import { DataProvider, useData } from './contexts/DataContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { Crown, Lock, ShieldCheck, Loader2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -56,13 +56,9 @@ const AppContent: React.FC = () => {
   const hasAccess = (view: View) => {
     if (!currentUser) return false;
     
-    // Admin tem acesso irrestrito (Master Key)
     if (currentUser.role === 'admin') return true;
-    
-    // Se for admin no email mas o role não atualizou, libera também
     if (currentUser.email.toLowerCase().includes('admin')) return true;
     
-    // Se chegou aqui, não é admin (currentUser.role é 'teacher')
     if (view === 'admin') return false;
     
     if (isPremiumFeature(view) && currentUser.plan !== 'premium') return false;
@@ -176,7 +172,9 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <DataProvider>
-      <AppContent />
+      <NotificationProvider>
+        <AppContent />
+      </NotificationProvider>
     </DataProvider>
   );
 };

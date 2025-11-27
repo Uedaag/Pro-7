@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Video, Plus, Play, X, Loader2, Film, AlertCircle, Save, Search, Edit3, Trash2 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import { useNotification } from '../contexts/NotificationContext';
 import { fetchVideos, addVideo, updateVideo, deleteVideo, extractYouTubeId, VideoItem } from '../services/videoService';
 
 const CATEGORIES = [
@@ -17,6 +18,7 @@ const CATEGORIES = [
 
 export const VideosView: React.FC = () => {
   const { currentUser } = useData();
+  const { notify } = useNotification();
   const isAdmin = currentUser?.role === 'admin';
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -79,8 +81,9 @@ export const VideosView: React.FC = () => {
     try {
       await deleteVideo(id);
       setVideos(prev => prev.filter(v => v.id !== id));
+      notify("Vídeo excluído com sucesso.", "success");
     } catch (error: any) {
-      alert("Erro ao excluir: " + error.message);
+      notify("Erro ao excluir: " + error.message, "error");
     }
   };
 
@@ -94,8 +97,10 @@ export const VideosView: React.FC = () => {
     try {
       if (editingVideo) {
         await updateVideo(editingVideo.id, formTitle, formUrl, formCategory);
+        notify("Vídeo atualizado com sucesso!", "success");
       } else {
         await addVideo(formTitle, formUrl, formCategory, currentUser.id);
+        notify("Vídeo adicionado com sucesso!", "success");
       }
       
       await loadGallery();
@@ -117,7 +122,8 @@ export const VideosView: React.FC = () => {
     const matchesCategory = selectedCategory === 'Todos' || video.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-
+  
+  // ... rest of component (render)
   return (
     <div className="max-w-7xl mx-auto pb-20 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4 border-b border-slate-200 dark:border-white/10 pb-6">

@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useNotification } from '../contexts/NotificationContext';
 import { User, UserPlan, SystemSettings } from '../types';
 import { 
   Users, ShieldCheck, TrendingUp, Search, 
@@ -10,23 +10,20 @@ import {
 
 export const AdminView: React.FC = () => {
   const { users, posts, updateUsersBatch, deleteUser, systemSettings, saveSystemSettings } = useData();
+  const { notify } = useNotification();
   const [filter, setFilter] = useState<'all' | 'pending' | 'premium' | 'blocked'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'settings'>('dashboard');
 
-  // Estados locais para edição em lote de usuários
   const [localUsers, setLocalUsers] = useState<User[]>([]);
   const [modifiedUsers, setModifiedUsers] = useState<Set<string>>(new Set());
   const [isSavingUsers, setIsSavingUsers] = useState(false);
 
-  // Estados locais para edição de configurações
   const [localSettings, setLocalSettings] = useState<SystemSettings[]>([]);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  // Sincroniza dados do contexto com estado local ao carregar
   useEffect(() => {
     setLocalUsers(users);
-    // Limpa modificações pendentes se a lista original mudar externamente
     setModifiedUsers(new Set());
   }, [users]);
 
@@ -34,7 +31,6 @@ export const AdminView: React.FC = () => {
     if (systemSettings.length > 0) {
       setLocalSettings(systemSettings);
     } else {
-       // Inicializa defaults se não vier do banco
        const defaults: SystemSettings[] = [
          { plan: 'free', can_use_ia: false, can_create_classes: true, can_access_escape: false, can_access_videos: false, can_export_pdf: false },
          { plan: 'premium', can_use_ia: true, can_create_classes: true, can_access_escape: true, can_access_videos: true, can_export_pdf: true }
@@ -48,7 +44,6 @@ export const AdminView: React.FC = () => {
   const activeUsers = users.filter(u => u.status === 'approved').length;
   const premiumUsers = users.filter(u => u.plan === 'premium').length;
 
-  // Lógica de Usuários (Edição Local)
   const handleLocalUserChange = (userId: string, changes: Partial<User>) => {
     setLocalUsers(prev => prev.map(u => 
         u.id === userId ? { ...u, ...changes } : u
@@ -59,12 +54,17 @@ export const AdminView: React.FC = () => {
   const handleSaveUsers = async () => {
     setIsSavingUsers(true);
     const usersToUpdate = localUsers.filter(u => modifiedUsers.has(u.id));
-    await updateUsersBatch(usersToUpdate);
-    setModifiedUsers(new Set());
-    setIsSavingUsers(false);
+    try {
+        await updateUsersBatch(usersToUpdate);
+        setModifiedUsers(new Set());
+        notify("Alterações nos usuários salvas com sucesso.", "success");
+    } catch (error) {
+        notify("Erro ao salvar alterações nos usuários.", "error");
+    } finally {
+        setIsSavingUsers(false);
+    }
   };
 
-  // Lógica de Configurações
   const handleSettingChange = (plan: UserPlan, field: keyof SystemSettings) => {
       setLocalSettings(prev => prev.map(s => {
           if (s.plan === plan) {
@@ -78,15 +78,14 @@ export const AdminView: React.FC = () => {
       setIsSavingSettings(true);
       try {
         await saveSystemSettings(localSettings);
-        alert("Configurações salvas com sucesso!");
+        notify("Configurações salvas com sucesso!", "success");
       } catch (e) {
-        alert("Erro ao salvar configurações.");
+        notify("Erro ao salvar configurações.", "error");
       } finally {
         setIsSavingSettings(false);
       }
   };
 
-  // Filtragem visual baseada no estado local
   const filteredUsers = localUsers.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           u.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -98,7 +97,7 @@ export const AdminView: React.FC = () => {
     
     return matchesSearch && matchesFilter;
   });
-
+  // ... rest of component
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 text-white p-8 rounded-2xl shadow-xl">

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Wand2, Loader2, Folder, Plus, Edit3, Trash2, Save, X, 
@@ -7,9 +6,11 @@ import {
 import { BimesterPlan, LessonRow, User } from '../types';
 import { generateBimesterPlan } from '../services/geminiService';
 import { useData } from '../contexts/DataContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
   const { plans, classes, addPlan, deletePlan, linkPlanToClass } = useData();
+  const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState<'generator' | 'library'>('generator');
   
   // States do Gerador
@@ -56,7 +57,7 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
       
       setGeneratedPlan(newLessons);
     } catch (e) { 
-      alert("Erro ao gerar plano. Tente novamente."); 
+      notify("Erro ao gerar plano. Tente novamente.", "error"); 
     } finally { 
       setIsLoading(false); 
     }
@@ -81,14 +82,14 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
       };
 
       await addPlan(newPlan);
-      alert("Plano salvo com sucesso na sua biblioteca!");
+      notify("Plano salvo com sucesso na sua biblioteca!", "success");
       
       // Reset e vai para a biblioteca
       setGeneratedPlan(null);
       setActiveTab('library');
     } catch (error: any) {
       console.error("Erro detalhado:", error);
-      alert(`Erro ao salvar no banco de dados: ${error.message || error}`);
+      notify(`Erro ao salvar no banco de dados: ${error.message || error}`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -98,6 +99,7 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
     e.stopPropagation();
     if(window.confirm("Tem certeza que deseja excluir este plano?")) {
         await deletePlan(id);
+        notify("Plano excluído com sucesso.", "success");
         if (selectedStoredPlan?.id === id) setSelectedStoredPlan(null);
     }
   };
@@ -112,11 +114,11 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
       if (!planToLink) return;
       try {
           await linkPlanToClass(planToLink, classId);
-          alert("Plano vinculado à turma com sucesso!");
+          notify("Plano vinculado à turma com sucesso!", "success");
           setIsLinkModalOpen(false);
           setPlanToLink(null);
       } catch (e: any) {
-          alert("Erro ao vincular: " + e.message);
+          notify("Erro ao vincular: " + e.message, "error");
       }
   };
 
@@ -266,7 +268,6 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 rounded-xl group-hover:bg-cyan-600 group-hover:text-white transition-colors"><List size={24} /></div>
                     <div className="flex gap-2 items-center">
-                        {/* BOTÃO VINCULAR TURMA ATUALIZADO PARA SER EXPLÍCITO */}
                         <button 
                             onClick={(e) => openLinkModal(plan.id, e)} 
                             className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-cyan-200 dark:border-cyan-800 text-cyan-600 dark:text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-colors shadow-sm"
@@ -328,14 +329,13 @@ export const MetrarView: React.FC<{ user: User }> = ({ user }) => {
                   ) : (
                       <div className="text-center py-6 bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                           <p className="text-slate-400 text-sm mb-2">Nenhuma turma cadastrada.</p>
-                          <a href="#" onClick={(e) => { e.preventDefault(); alert("Vá para a aba Turmas para cadastrar uma nova."); }} className="text-cyan-600 font-bold text-xs hover:underline">Cadastrar Turma</a>
+                          <a href="#" onClick={(e) => { e.preventDefault(); notify("Vá para a aba Turmas para cadastrar uma nova.", "info"); }} className="text-cyan-600 font-bold text-xs hover:underline">Cadastrar Turma</a>
                       </div>
                   )}
               </div>
           </div>
       )}
 
-      {/* Modal de Detalhes */}
       {selectedStoredPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-[#0f172a] w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-in">

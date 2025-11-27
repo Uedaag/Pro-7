@@ -5,11 +5,13 @@ import {
   Palette, BrainCircuit, ChevronLeft, ArrowRight, BookOpen
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import { useNotification } from '../contexts/NotificationContext';
 import { generateEducationalActivity } from '../services/geminiService';
 import { ActivityContent, ActivityType, GeneratedActivity, LessonRow } from '../types';
 
 export const ActivityGeneratorView: React.FC = () => {
   const { classes, events, plans, addActivity } = useData();
+  const { notify } = useNotification();
   
   // Estados de Navegação e Seleção
   const [step, setStep] = useState(1);
@@ -33,16 +35,13 @@ export const ActivityGeneratorView: React.FC = () => {
   // Helpers
   const currentClass = classes.find(c => c.id === selectedClassId);
   
-  // Filtra eventos da turma selecionada
   const classEvents = events
     .filter(e => e.classId === selectedClassId || !e.classId)
     .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
     .slice(0, 5);
 
-  // Filtra planos vinculados à turma
   const linkedPlans = plans.filter(p => currentClass?.linkedPlanIds?.includes(p.id));
 
-  // Coleta todas as aulas de todos os planos vinculados para exibição
   const allLinkedLessons = linkedPlans.flatMap(p => p.lessons.map(l => ({ ...l, planTheme: p.theme })));
 
   const handleGenerate = async () => {
@@ -57,16 +56,14 @@ export const ActivityGeneratorView: React.FC = () => {
         topicToUse = evt ? `${evt.title} - ${evt.description || ''}` : '';
     } else if (knowledgeSource === 'plans') {
         const selectedLessons = allLinkedLessons.filter(l => selectedLessonIds.includes(l.id));
-        // Concatena o conteúdo das aulas selecionadas
         topicToUse = selectedLessons.map(l => `Aula ${l.number} (${l.title}): ${l.content}`).join('; ');
     }
 
     if (!topicToUse) {
-        alert("Por favor, defina o conteúdo para gerar a atividade.");
+        notify("Por favor, defina o conteúdo para gerar a atividade.", "warning");
         return;
     }
 
-    // Adiciona as instruções personalizadas ao prompt
     const finalConfig = customInstructions 
         ? `Instruções adicionais do professor: ${customInstructions}.` 
         : 'Padrão';
@@ -84,7 +81,7 @@ export const ActivityGeneratorView: React.FC = () => {
     } catch (e: any) { 
       let msg = e.message || "Erro desconhecido";
       if (msg.includes('PERMISSION_DENIED')) msg = "Erro de permissão na API (Chave inválida ou bloqueada).";
-      alert("Erro ao gerar: " + msg); 
+      notify("Erro ao gerar: " + msg, "error"); 
     } finally { 
       setIsLoading(false); 
     }
@@ -103,7 +100,7 @@ export const ActivityGeneratorView: React.FC = () => {
             createdAt: new Date().toISOString() 
         };
         await addActivity(newActivity);
-        alert("Material salvo na biblioteca da turma com sucesso!");
+        notify("Material salvo na biblioteca da turma com sucesso!", "success");
         setResult(null); 
         setStep(1);
         setManualTopic('');
@@ -111,7 +108,7 @@ export const ActivityGeneratorView: React.FC = () => {
         setSelectedLessonIds([]);
         setCustomInstructions('');
     } catch (e: any) { 
-        alert("Erro ao salvar: " + e.message); 
+        notify("Erro ao salvar: " + e.message, "error"); 
     } finally { 
         setIsSaving(false); 
     }
@@ -123,7 +120,6 @@ export const ActivityGeneratorView: React.FC = () => {
       );
   };
 
-  // Ícones para os tipos
   const getActivityIcon = (type: ActivityType) => {
       switch (type) {
           case 'Prova': return CheckSquare;
@@ -136,7 +132,6 @@ export const ActivityGeneratorView: React.FC = () => {
       }
   };
 
-  // --- RENDERIZAÇÃO DO RESULTADO ---
   if (result) {
     return (
       <div className="max-w-5xl mx-auto pb-20 animate-fade-in">
@@ -160,7 +155,6 @@ export const ActivityGeneratorView: React.FC = () => {
           </div>
           <div className="p-8 bg-white dark:bg-[#0f172a] min-h-[500px] overflow-auto">
              <div className="max-w-3xl mx-auto space-y-8">
-                {/* Preview Simplificado do Conteúdo */}
                 {result.introText && (
                     <div className="prose dark:prose-invert max-w-none">
                         <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Introdução</h3>
@@ -224,7 +218,6 @@ export const ActivityGeneratorView: React.FC = () => {
     );
   }
 
-  // --- RENDERIZAÇÃO DO WIZARD (INPUT) ---
   return (
     <div className="max-w-5xl mx-auto pb-20 animate-fade-in flex flex-col items-center min-h-[80vh] justify-center">
       
@@ -233,7 +226,6 @@ export const ActivityGeneratorView: React.FC = () => {
          <p className="text-slate-500 dark:text-slate-400 text-lg">Crie materiais didáticos visualmente ricos e estruturados com IA.</p>
       </div>
 
-      {/* STEPPER */}
       <div className="flex items-center gap-2 mb-12">
          {[1, 2, 3].map(i => (
              <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step === i ? 'w-12 bg-cyan-600' : step > i ? 'w-12 bg-cyan-200' : 'w-12 bg-slate-200 dark:bg-slate-800'}`}></div>
@@ -242,7 +234,6 @@ export const ActivityGeneratorView: React.FC = () => {
 
       <div className="bg-white dark:bg-[#0f172a] w-full max-w-4xl rounded-3xl shadow-xl border border-slate-200 dark:border-white/10 overflow-hidden relative min-h-[500px] flex flex-col">
          
-         {/* STEP 1: SELECIONAR TURMA */}
          {step === 1 && (
              <div className="flex-1 p-8 md:p-12 flex flex-col animate-fade-in">
                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">1. Selecione a Turma</h2>
@@ -277,13 +268,11 @@ export const ActivityGeneratorView: React.FC = () => {
              </div>
          )}
 
-         {/* STEP 2: BASE DE CONHECIMENTO */}
          {step === 2 && (
              <div className="flex-1 p-8 md:p-12 flex flex-col animate-fade-in">
                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">2. Base de Conhecimento</h2>
                  
                  <div className="space-y-6">
-                     {/* Opção Manual */}
                      <div 
                         className={`p-6 rounded-2xl border-2 transition-all cursor-pointer
                             ${knowledgeSource === 'manual' ? 'border-cyan-500 bg-cyan-50/30 dark:bg-cyan-900/10' : 'border-slate-200 dark:border-white/10'}
@@ -308,7 +297,6 @@ export const ActivityGeneratorView: React.FC = () => {
                          )}
                      </div>
 
-                     {/* Opção Agenda */}
                      <div 
                         className={`p-6 rounded-2xl border-2 transition-all cursor-pointer
                             ${knowledgeSource === 'agenda' ? 'border-cyan-500 bg-cyan-50/30 dark:bg-cyan-900/10' : 'border-slate-200 dark:border-white/10'}
@@ -351,7 +339,6 @@ export const ActivityGeneratorView: React.FC = () => {
                          )}
                      </div>
 
-                     {/* Opção Planos de Aula Vinculados */}
                      <div 
                         className={`p-6 rounded-2xl border-2 transition-all cursor-pointer
                             ${knowledgeSource === 'plans' ? 'border-cyan-500 bg-cyan-50/30 dark:bg-cyan-900/10' : 'border-slate-200 dark:border-white/10'}
@@ -395,7 +382,6 @@ export const ActivityGeneratorView: React.FC = () => {
                          )}
                      </div>
 
-                     {/* Campo de Instruções Personalizadas */}
                      <div className="pt-4 border-t border-slate-200 dark:border-white/10">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Instruções Personalizadas (Opcional)</label>
                         <textarea 
@@ -410,7 +396,6 @@ export const ActivityGeneratorView: React.FC = () => {
              </div>
          )}
 
-         {/* STEP 3: TIPO DE MATERIAL */}
          {step === 3 && (
              <div className="flex-1 p-8 md:p-12 flex flex-col animate-fade-in">
                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">3. Tipo de Material</h2>
@@ -444,7 +429,6 @@ export const ActivityGeneratorView: React.FC = () => {
              </div>
          )}
 
-         {/* FOOTER NAVIGATION */}
          <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-between items-center bg-slate-50/50 dark:bg-[#0b1121]">
              {step > 1 ? (
                  <button 
@@ -460,10 +444,10 @@ export const ActivityGeneratorView: React.FC = () => {
              {step < 3 ? (
                  <button 
                     onClick={() => {
-                        if (step === 1 && !selectedClassId) return alert("Selecione uma turma.");
-                        if (step === 2 && knowledgeSource === 'manual' && !manualTopic) return alert("Digite um tema.");
-                        if (step === 2 && knowledgeSource === 'agenda' && !selectedEventId) return alert("Selecione uma aula da agenda.");
-                        if (step === 2 && knowledgeSource === 'plans' && selectedLessonIds.length === 0) return alert("Selecione pelo menos uma aula do plano.");
+                        if (step === 1 && !selectedClassId) return notify("Selecione uma turma.", "warning");
+                        if (step === 2 && knowledgeSource === 'manual' && !manualTopic) return notify("Digite um tema.", "warning");
+                        if (step === 2 && knowledgeSource === 'agenda' && !selectedEventId) return notify("Selecione uma aula da agenda.", "warning");
+                        if (step === 2 && knowledgeSource === 'plans' && selectedLessonIds.length === 0) return notify("Selecione pelo menos uma aula do plano.", "warning");
                         setStep(prev => prev + 1);
                     }}
                     className="bg-cyan-400 hover:bg-cyan-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
