@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   CalendarEvent,
@@ -41,7 +40,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleSessionChange = async (session: Session | null) => {
     if (!session?.user) {
       if (currentUserIdRef.current !== null) {
-        console.log('[AUTH] Sessão encerrada, limpando dados.');
         currentUserIdRef.current = null;
         setCurrentUser(null);
         setEvents([]);
@@ -138,8 +136,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- DATA FETCHING ---
   const fetchAllData = async (userId: string) => {
-    console.log('[DATA] Buscando dados...');
-
     // 1. Agenda
     try {
       const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
@@ -148,7 +144,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
         })));
       }
-    } catch (err) { console.error('[DATA] Agenda:', err); }
+    } catch (err) { console.error('Erro Agenda:', err); }
 
     // 2. Planos
     try {
@@ -160,7 +156,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: p.created_at
         })));
       }
-    } catch (err) { console.error('[DATA] Planos:', err); }
+    } catch (err) { console.error('Erro Planos:', err); }
 
     // 3. Turmas
     let loadedClasses: any[] = [];
@@ -172,7 +168,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: c.id, userId: c.user_id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, studentsCount: c.students_count, linkedPlanIds: c.linked_plan_ids || [], generatedActivities: []
         })));
       }
-    } catch (err) { console.error('[DATA] Turmas:', err); }
+    } catch (err) { console.error('Erro Turmas:', err); }
 
     // 4. Comunidade
     try {
@@ -182,7 +178,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: p.id, userId: p.user_id, userName: p.user_name, content: p.content, likes: p.likes, createdAt: p.created_at, isPinned: p.is_pinned
         })));
       }
-    } catch (err) { console.error('[DATA] Comunidade:', err); }
+    } catch (err) {}
 
     // 5. Configurações
     try {
@@ -209,7 +205,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setClasses((prev) => prev.map((c) => ({ ...c, generatedActivities: activitiesByClass[c.id] || [] })));
         }
       }
-    } catch (err) { console.error('[DATA] Atividades:', err); }
+    } catch (err) { console.error('Erro Atividades:', err); }
 
     // 7. Admin Users
     try {
@@ -227,29 +223,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshData = async () => { if (currentUser) await fetchAllData(currentUser.id); };
 
-  // --- GRADES MANAGEMENT (NOVO) ---
+  // --- GRADES MANAGEMENT ---
   
   const fetchClassGradesData = async (classId: string) => {
     try {
         const [studentsRes, assessmentsRes, gradesRes] = await Promise.all([
             supabase.from('students').select('*').eq('class_id', classId),
             supabase.from('assessments').select('*').eq('class_id', classId),
-            // Para grades, idealmente filtramos por alunos, mas podemos filtrar no front se necessário ou usar join
-            // Aqui pegamos todas as notas de alunos desta turma
             supabase.from('grades').select('*, students!inner(class_id)').eq('students.class_id', classId) 
         ]);
 
-        const students = (studentsRes.data || []).map((s: any) => ({
-            id: s.id, classId: s.class_id, name: s.name
-        }));
-
-        const assessments = (assessmentsRes.data || []).map((a: any) => ({
-            id: a.id, classId: a.class_id, title: a.title, weight: a.weight
-        }));
-
-        const grades = (gradesRes.data || []).map((g: any) => ({
-            id: g.id, studentId: g.student_id, assessmentId: g.assessment_id, score: g.score
-        }));
+        const students = (studentsRes.data || []).map((s: any) => ({ id: s.id, classId: s.class_id, name: s.name }));
+        const assessments = (assessmentsRes.data || []).map((a: any) => ({ id: a.id, classId: a.class_id, title: a.title, weight: a.weight }));
+        const grades = (gradesRes.data || []).map((g: any) => ({ id: g.id, studentId: g.student_id, assessmentId: g.assessment_id, score: g.score }));
 
         return { students, assessments, grades };
     } catch (error) {
@@ -259,47 +245,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addStudent = async (student: Omit<Student, 'id'>) => {
-      const { data, error } = await supabase.from('students').insert([{
-          class_id: student.classId,
-          name: student.name
-      }]).select().single();
-      
+      const { data, error } = await supabase.from('students').insert([{ class_id: student.classId, name: student.name }]).select().single();
       if (error) { console.error(error); return null; }
       return { id: data.id, classId: data.class_id, name: data.name };
   };
 
-  const deleteStudent = async (id: string) => {
-      await supabase.from('students').delete().eq('id', id);
-  };
+  const deleteStudent = async (id: string) => { await supabase.from('students').delete().eq('id', id); };
 
   const addAssessment = async (assessment: Omit<Assessment, 'id'>) => {
-      const { data, error } = await supabase.from('assessments').insert([{
-          class_id: assessment.classId,
-          title: assessment.title,
-          weight: assessment.weight
-      }]).select().single();
-
+      const { data, error } = await supabase.from('assessments').insert([{ class_id: assessment.classId, title: assessment.title, weight: assessment.weight }]).select().single();
       if (error) { console.error(error); return null; }
       return { id: data.id, classId: data.class_id, title: data.title, weight: data.weight };
   };
 
-  const deleteAssessment = async (id: string) => {
-      await supabase.from('assessments').delete().eq('id', id);
-  };
+  const deleteAssessment = async (id: string) => { await supabase.from('assessments').delete().eq('id', id); };
 
   const saveGrade = async (grade: { studentId: string, assessmentId: string, score: number }) => {
-      // Upsert: atualiza se existe, cria se não existe
-      const { error } = await supabase.from('grades').upsert({
-          student_id: grade.studentId,
-          assessment_id: grade.assessmentId,
-          score: grade.score
-      }, { onConflict: 'student_id, assessment_id' }); // Requer CONSTRAINT UNIQUE no banco
-      
-      if (error) console.error("Erro ao salvar nota:", error);
+      await supabase.from('grades').upsert({
+          student_id: grade.studentId, assessment_id: grade.assessmentId, score: grade.score
+      }, { onConflict: 'student_id, assessment_id' });
   };
 
-
-  // --- AUTH ACTIONS ---
+  // --- ACTIONS ---
   const signIn = async (email: string, pass: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     return { error };
@@ -324,9 +291,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       supabase.auth.signOut().catch(console.error);
   };
 
-  // --- CRUD ACTIONS ---
   const addClass = async (c: any) => {
-    const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id}]).select().single();
+    const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id, students_count: c.studentsCount}]).select().single();
     if(error) throw new Error(error.message);
     if(data) setClasses(prev=>[...prev, {...c, id: data.id}]);
   };
