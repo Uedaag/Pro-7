@@ -36,7 +36,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [posts, setPosts] = useState<Post[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSettings[]>([]);
 
-  // --- AUTHENTICATION ---
   const handleSessionChange = async (session: Session | null) => {
     if (!session?.user) {
       if (currentUserIdRef.current !== null) {
@@ -110,7 +109,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
-
     const init = async () => {
       try {
         const { data } = await supabase.auth.getSession();
@@ -119,95 +117,65 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (mounted) setLoading(false);
       }
     };
-
     init();
-
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (mounted && (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION')) {
          handleSessionChange(session);
       }
     });
-
-    return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
-    };
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
 
-  // --- DATA FETCHING ---
   const fetchAllData = async (userId: string) => {
-    // 1. Agenda
-    try {
-      const { data, error } = await supabase.from('events').select('*').eq('user_id', userId);
-      if (!error && data) {
-        setEvents(data.map((e: any) => ({
-          id: e.id, userId: e.user_id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, classId: e.class_id, className: e.class_name
-        })));
-      }
-    } catch (err) { console.error('Erro Agenda:', err); }
+    const tables = [
+        { name: 'events', setter: setEvents },
+        { name: 'plans', setter: setPlans },
+        { name: 'classes', setter: setClasses },
+        { name: 'community', setter: setPosts },
+        { name: 'configuracoes_sistema', setter: setSystemSettings }
+    ];
 
-    // 2. Planos
-    try {
-      const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId);
-      if (!error && data) {
-        setPlans(data.map((p: any) => ({
-          id: p.id, userId: p.user_id, className: p.class_name, subject: p.subject, bimester: p.bimester, totalLessons: p.total_lessons, theme: p.theme, bnccFocus: p.bncc_focus,
-          lessons: typeof p.lessons === 'string' ? JSON.parse(p.lessons) : p.lessons, 
-          createdAt: p.created_at
-        })));
-      }
-    } catch (err) { console.error('Erro Planos:', err); }
-
-    // 3. Turmas
-    let loadedClasses: any[] = [];
-    try {
-      const { data, error } = await supabase.from('classes').select('*').eq('user_id', userId);
-      if (!error && data) {
-        loadedClasses = data;
-        setClasses(data.map((c: any) => ({
-          id: c.id, userId: c.user_id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, studentsCount: c.students_count, linkedPlanIds: c.linked_plan_ids || [], generatedActivities: []
-        })));
-      }
-    } catch (err) { console.error('Erro Turmas:', err); }
-
-    // 4. Comunidade
-    try {
-      const { data, error } = await supabase.from('community').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        setPosts(data.map((p: any) => ({
-          id: p.id, userId: p.user_id, userName: p.user_name, content: p.content, likes: p.likes, createdAt: p.created_at, isPinned: p.is_pinned
-        })));
-      }
-    } catch (err) {}
-
-    // 5. Configurações
-    try {
-      const { data } = await supabase.from('configuracoes_sistema').select('*');
-      if (data && data.length > 0) setSystemSettings(data as SystemSettings[]);
-    } catch (err) {}
-
-    // 6. Atividades (Carregamento Tardio)
-    try {
-      if (loadedClasses.length > 0) {
-        const classIds = loadedClasses.map((c) => c.id);
-        const { data, error } = await supabase.from('activities').select('*').in('class_id', classIds);
-        
-        if (!error && data) {
-          const activitiesByClass: Record<string, GeneratedActivity[]> = {};
-          data.forEach((a: any) => {
-            const content = typeof a.content === 'string' ? JSON.parse(a.content) : a.content;
-            const act: GeneratedActivity = { 
-              id: a.id, classId: a.class_id, type: a.type, title: a.title, content, createdAt: a.created_at, relatedLessonIds: a.related_lesson_ids || []
-            };
-            if (!activitiesByClass[a.class_id]) activitiesByClass[a.class_id] = [];
-            activitiesByClass[a.class_id].push(act);
-          });
-          setClasses((prev) => prev.map((c) => ({ ...c, generatedActivities: activitiesByClass[c.id] || [] })));
+    for (const t of tables) {
+        try {
+            const query = supabase.from(t.name).select('*');
+            if (['events', 'plans', 'classes'].includes(t.name)) query.eq('user_id', userId);
+            if (t.name === 'community') query.order('created_at', { ascending: false });
+            
+            const { data } = await query;
+            if (data) {
+                const mappedData = data.map((item: any) => {
+                    if (t.name === 'events') return { ...item, id: item.id, userId: item.user_id, classId: item.class_id, className: item.class_name };
+                    if (t.name === 'plans') return { ...item, id: item.id, userId: item.user_id, className: item.class_name, bnccFocus: item.bncc_focus, totalLessons: item.total_lessons, lessons: typeof item.lessons === 'string' ? JSON.parse(item.lessons) : item.lessons, createdAt: item.created_at };
+                    if (t.name === 'classes') return { ...item, id: item.id, userId: item.user_id, studentsCount: item.students_count, linkedPlanIds: item.linked_plan_ids || [], generatedActivities: [] };
+                    if (t.name === 'community') return { ...item, id: item.id, userId: item.user_id, userName: item.user_name, createdAt: item.created_at, isPinned: item.is_pinned, userAvatar: item.user_avatar, imageUrl: item.image_url };
+                    return item;
+                });
+                t.setter(mappedData);
+            }
+        } catch (e) {
+            console.error(`Erro ao carregar ${t.name}`, e);
         }
-      }
-    } catch (err) { console.error('Erro Atividades:', err); }
+    }
 
-    // 7. Admin Users
+    try {
+        const { data: classesData } = await supabase.from('classes').select('id').eq('user_id', userId);
+        if (classesData && classesData.length > 0) {
+            const classIds = classesData.map(c => c.id);
+            const { data: activities } = await supabase.from('activities').select('*').in('class_id', classIds);
+            
+            if (activities) {
+                const activitiesByClass: Record<string, GeneratedActivity[]> = {};
+                activities.forEach((a: any) => {
+                    const content = typeof a.content === 'string' ? JSON.parse(a.content) : a.content;
+                    const act = { id: a.id, classId: a.class_id, type: a.type, title: a.title, content, createdAt: a.created_at };
+                    if (!activitiesByClass[a.class_id]) activitiesByClass[a.class_id] = [];
+                    activitiesByClass[a.class_id].push(act);
+                });
+                setClasses(prev => prev.map(c => ({ ...c, generatedActivities: activitiesByClass[c.id] || [] })));
+            }
+        }
+    } catch(e) {}
+
     try {
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single();
         if (profile?.role === 'admin') {
@@ -218,55 +186,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 })));
             }
         }
-    } catch (err) {}
+    } catch(e) {}
   };
 
   const refreshData = async () => { if (currentUser) await fetchAllData(currentUser.id); };
 
-  // --- GRADES MANAGEMENT ---
-  
-  const fetchClassGradesData = async (classId: string) => {
-    try {
-        const [studentsRes, assessmentsRes, gradesRes] = await Promise.all([
-            supabase.from('students').select('*').eq('class_id', classId),
-            supabase.from('assessments').select('*').eq('class_id', classId),
-            supabase.from('grades').select('*, students!inner(class_id)').eq('students.class_id', classId) 
-        ]);
-
-        const students = (studentsRes.data || []).map((s: any) => ({ id: s.id, classId: s.class_id, name: s.name }));
-        const assessments = (assessmentsRes.data || []).map((a: any) => ({ id: a.id, classId: a.class_id, title: a.title, weight: a.weight }));
-        const grades = (gradesRes.data || []).map((g: any) => ({ id: g.id, studentId: g.student_id, assessmentId: g.assessment_id, score: g.score }));
-
-        return { students, assessments, grades };
-    } catch (error) {
-        console.error("Erro ao buscar notas:", error);
-        return { students: [], assessments: [], grades: [] };
-    }
-  };
-
-  const addStudent = async (student: Omit<Student, 'id'>) => {
-      const { data, error } = await supabase.from('students').insert([{ class_id: student.classId, name: student.name }]).select().single();
-      if (error) { console.error(error); return null; }
-      return { id: data.id, classId: data.class_id, name: data.name };
-  };
-
-  const deleteStudent = async (id: string) => { await supabase.from('students').delete().eq('id', id); };
-
-  const addAssessment = async (assessment: Omit<Assessment, 'id'>) => {
-      const { data, error } = await supabase.from('assessments').insert([{ class_id: assessment.classId, title: assessment.title, weight: assessment.weight }]).select().single();
-      if (error) { console.error(error); return null; }
-      return { id: data.id, classId: data.class_id, title: data.title, weight: data.weight };
-  };
-
-  const deleteAssessment = async (id: string) => { await supabase.from('assessments').delete().eq('id', id); };
-
-  const saveGrade = async (grade: { studentId: string, assessmentId: string, score: number }) => {
-      await supabase.from('grades').upsert({
-          student_id: grade.studentId, assessment_id: grade.assessmentId, score: grade.score
-      }, { onConflict: 'student_id, assessment_id' });
-  };
-
-  // --- ACTIONS ---
   const signIn = async (email: string, pass: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     return { error };
@@ -292,9 +216,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addClass = async (c: any) => {
-    const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id, students_count: c.studentsCount}]).select().single();
+    const dbClass = { user_id: currentUser?.id, name: c.name, grade: c.grade, subject: c.subject, shift: c.shift, students_count: c.studentsCount || 0 };
+    const { data, error } = await supabase.from('classes').insert([dbClass]).select().single();
     if(error) throw new Error(error.message);
-    if(data) setClasses(prev=>[...prev, {...c, id: data.id}]);
+    if(data) {
+        const newClass = { ...c, id: data.id, userId: data.user_id, studentsCount: data.students_count, linkedPlanIds: [], generatedActivities: [] };
+        setClasses(prev=>[...prev, newClass]);
+    }
   };
   const updateClass = async (c: any) => {};
   const deleteClass = async (id: string) => {
@@ -303,17 +231,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addEvent = async (e: any) => {
-    const { data, error } = await supabase.from('events').insert([{...e, user_id: currentUser?.id}]).select().single();
+    const dbEvent = { user_id: currentUser?.id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, class_id: e.classId, class_name: e.className };
+    const { data, error } = await supabase.from('events').insert([dbEvent]).select().single();
     if(error) throw new Error(error.message);
-    if(data) setEvents(prev=>[...prev, {...e, id: data.id}]);
+    if(data) {
+        const newEvent = { ...e, id: data.id, userId: data.user_id, classId: data.class_id, className: data.class_name };
+        setEvents(prev=>[...prev, newEvent]);
+    }
   };
   const addEvents = async (es: any[]) => {
-      const { data, error } = await supabase.from('events').insert(es.map(e => ({...e, user_id: currentUser?.id}))).select();
+      const dbEvents = es.map(e => ({ user_id: currentUser?.id, title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, class_id: e.classId, class_name: e.className }));
+      const { data, error } = await supabase.from('events').insert(dbEvents).select();
       if(error) throw new Error(error.message);
-      if(data) setEvents(prev => [...prev, ...data.map((d: any) => ({...d, id: d.id, userId: d.user_id}))]);
+      if(data) {
+          const mapped = data.map((d: any) => ({ id: d.id, userId: d.user_id, title: d.title, type: d.type, start: d.start, end: d.end, description: d.description, classId: d.class_id, className: d.class_name }));
+          setEvents(prev => [...prev, ...mapped]);
+      }
   }; 
   const updateEvent = async (e: any) => {
-    const { error } = await supabase.from('events').update(e).eq('id', e.id);
+    const dbEvent = { title: e.title, type: e.type, start: e.start, end: e.end, description: e.description, class_id: e.classId, class_name: e.className };
+    const { error } = await supabase.from('events').update(dbEvent).eq('id', e.id);
     if(!error) setEvents(prev=>prev.map(ev=>ev.id===e.id?e:ev));
   };
   const deleteEvent = async (id: string) => {
@@ -326,17 +263,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const user_id = user?.id || currentUser?.id;
     if (!user_id) throw new Error("Usuário não autenticado.");
 
-    const { data, error } = await supabase.from('plans').insert([{
-        user_id: user_id,
-        class_name: plan.className,
-        subject: plan.subject,
-        bimester: plan.bimester,
-        total_lessons: plan.totalLessons,
-        theme: plan.theme,
-        bncc_focus: plan.bnccFocus,
-        lessons: plan.lessons 
-    }]).select().single();
-    
+    const dbPlan = { user_id: user_id, class_name: plan.className, subject: plan.subject, bimester: plan.bimester, total_lessons: plan.totalLessons, theme: plan.theme, bncc_focus: plan.bnccFocus, lessons: plan.lessons };
+
+    const { data, error } = await supabase.from('plans').insert([dbPlan]).select().single();
     if (error) throw new Error(error.message);
     if (data) setPlans(prev => [...prev, { ...plan, id: data.id, userId: user_id, createdAt: data.created_at }]);
   };
@@ -363,7 +292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addPost = async (c: string, u: User) => {
-    const { data, error } = await supabase.from('community').insert([{user_id: u.id, user_name: u.name, content: c}]).select().single();
+    const { data, error } = await supabase.from('community').insert([{user_id: u.id, user_name: u.name, content: c, user_avatar: u.avatarUrl}]).select().single();
     if(error) throw new Error(error.message);
     if(data) setPosts(prev=>[{...data, userId: data.user_id, userName: data.user_name}, ...prev]);
   };
@@ -381,15 +310,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addActivity = async (act: GeneratedActivity) => {
-    const { data, error } = await supabase.from('activities').insert([{
-        class_id: act.classId,
-        type: act.type,
-        title: act.title,
-        content: act.content
-    }]).select().single();
-
+    const dbActivity = { class_id: act.classId, type: act.type, title: act.title, content: act.content };
+    const { data, error } = await supabase.from('activities').insert([dbActivity]).select().single();
     if (error) throw new Error(error.message);
-    
     if (data) {
         const newAct = { ...act, id: data.id, createdAt: data.created_at };
         setClasses(prev => prev.map(c => c.id === act.classId ? {...c, generatedActivities: [...c.generatedActivities, newAct]} : c));
@@ -401,7 +324,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
          name: u.name, bio: u.bio, phone: u.phone, theme_preference: u.themePreference,
          avatar_url: u.avatarUrl, education: u.education, expertise: u.expertise
      }).eq('id', u.id);
-     if(!error) setCurrentUser(u);
+     if(!error) {
+         setCurrentUser(u);
+         setUsers(prev => prev.map(user => user.id === u.id ? u : user));
+     } else {
+         throw new Error(error.message);
+     }
   };
   const updateUsersBatch = async (us: User[]) => {
       for (const u of us) {
@@ -417,6 +345,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.from('configuracoes_sistema').upsert(s);
       if (error) throw error;
       setSystemSettings(s);
+  };
+
+  const fetchClassGradesData = async (classId: string) => {
+    try {
+        const [studentsRes, assessmentsRes, gradesRes] = await Promise.all([
+            supabase.from('students').select('*').eq('class_id', classId),
+            supabase.from('assessments').select('*').eq('class_id', classId),
+            supabase.from('grades').select('*, students!inner(class_id)').eq('students.class_id', classId) 
+        ]);
+        const students = (studentsRes.data || []).map((s: any) => ({ id: s.id, classId: s.class_id, name: s.name }));
+        const assessments = (assessmentsRes.data || []).map((a: any) => ({ id: a.id, classId: a.class_id, title: a.title, weight: a.weight }));
+        const grades = (gradesRes.data || []).map((g: any) => ({ id: g.id, studentId: g.student_id, assessmentId: g.assessment_id, score: g.score }));
+        return { students, assessments, grades };
+    } catch (error) {
+        return { students: [], assessments: [], grades: [] };
+    }
+  };
+  const addStudent = async (student: Omit<Student, 'id'>) => {
+      const { data, error } = await supabase.from('students').insert([{ class_id: student.classId, name: student.name }]).select().single();
+      if (error) return null;
+      return { id: data.id, classId: data.class_id, name: data.name };
+  };
+  const deleteStudent = async (id: string) => { await supabase.from('students').delete().eq('id', id); };
+  const addAssessment = async (assessment: Omit<Assessment, 'id'>) => {
+      const { data, error } = await supabase.from('assessments').insert([{ class_id: assessment.classId, title: assessment.title, weight: assessment.weight }]).select().single();
+      if (error) return null;
+      return { id: data.id, classId: data.class_id, title: data.title, weight: data.weight };
+  };
+  const deleteAssessment = async (id: string) => { await supabase.from('assessments').delete().eq('id', id); };
+  const saveGrade = async (grade: { studentId: string, assessmentId: string, score: number }) => {
+      await supabase.from('grades').upsert({
+          student_id: grade.studentId, assessment_id: grade.assessmentId, score: grade.score
+      }, { onConflict: 'student_id, assessment_id' });
   };
 
   return (
