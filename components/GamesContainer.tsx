@@ -4,11 +4,13 @@ import { EscapeRoomDisplay } from './EscapeRoomDisplay';
 import { generateEscapeRoom } from '../services/geminiService';
 import { EscapeRoomData } from '../types';
 import { Sparkles, BrainCircuit, Gamepad2, AlertCircle } from 'lucide-react';
+import { useNotification } from '../contexts/NotificationContext';
 
 export const GamesContainer: React.FC = () => {
   const [data, setData] = useState<EscapeRoomData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { notify } = useNotification();
 
   const handleGenerate = async (topic: string, grade: string, duration: string, difficulty: string) => {
     setIsLoading(true);
@@ -17,16 +19,11 @@ export const GamesContainer: React.FC = () => {
       const result = await generateEscapeRoom(topic, grade, duration, difficulty);
       setData(result);
     } catch (err: any) {
-      console.error(err);
-      
       let msg = err.message || "Ocorreu um erro desconhecido.";
-      
-      // Tenta limpar mensagens de erro JSON bruto
       if (msg.includes('PERMISSION_DENIED') || msg.includes('API key')) {
          msg = "Chave de API inválida ou bloqueada pelo Google. Verifique sua configuração no Vercel (VITE_GOOGLE_API_KEY).";
       } else if (msg.includes('{')) {
          try {
-            // Tenta extrair a mensagem de dentro do JSON
             const jsonMatch = msg.match(/\{.*\}/);
             if (jsonMatch) {
                const parsed = JSON.parse(jsonMatch[0]);
@@ -34,7 +31,7 @@ export const GamesContainer: React.FC = () => {
             }
          } catch (e) { /* ignore */ }
       }
-      
+      notify("Erro ao gerar missão: " + msg, "error");
       setError(msg);
     } finally {
       setIsLoading(false);

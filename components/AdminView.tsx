@@ -97,7 +97,7 @@ export const AdminView: React.FC = () => {
     
     return matchesSearch && matchesFilter;
   });
-  // ... rest of component
+  
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 text-white p-8 rounded-2xl shadow-xl">

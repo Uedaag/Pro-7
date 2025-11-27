@@ -20,12 +20,10 @@ import { Crown, Lock, ShieldCheck, Loader2 } from 'lucide-react';
 const AppContent: React.FC = () => {
   const { currentUser, loading, signOut } = useData();
   
-  // Layout State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Sync Theme
   useEffect(() => {
     if (currentUser?.themePreference === 'dark') {
       setIsDarkMode(true);
@@ -48,19 +46,15 @@ const AppContent: React.FC = () => {
     });
   };
 
-  // --- ACCESS CONTROL (GATEKEEPER) ---
   const isPremiumFeature = (view: View) => {
     return ['games', 'activity-generator', 'videos'].includes(view);
   };
 
   const hasAccess = (view: View) => {
     if (!currentUser) return false;
-    
     if (currentUser.role === 'admin') return true;
     if (currentUser.email.toLowerCase().includes('admin')) return true;
-    
     if (view === 'admin') return false;
-    
     if (isPremiumFeature(view) && currentUser.plan !== 'premium') return false;
     return true;
   };
@@ -94,76 +88,35 @@ const AppContent: React.FC = () => {
 
   const renderView = () => {
     if (!currentUser) return null;
-
     if (!hasAccess(currentView)) {
        if (currentView === 'admin') return <AdminGate />;
        return <PremiumGate />;
     }
-
     switch (currentView) {
-      case 'dashboard':
-        return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
-      case 'games':
-        return <GamesContainer />;
-      case 'profile':
-        return <ProfileView />;
-      case 'agenda':
-        return <AgendaView user={currentUser} />;
-      case 'classes':
-        return <ClassesView user={currentUser} onNavigate={setCurrentView} />;
-      case 'lesson-plans':
-        return <MetrarView user={currentUser} />; 
-      case 'videos':
-        return <VideosView />;
-      case 'activity-generator':
-        return <ActivityGeneratorView />;
-      case 'admin':
-        return <AdminView />;
-      case 'community':
-        return <CommunityView />;
-      default:
-        return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
+      case 'dashboard': return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
+      case 'games': return <GamesContainer />;
+      case 'profile': return <ProfileView />;
+      case 'agenda': return <AgendaView user={currentUser} />;
+      case 'classes': return <ClassesView user={currentUser} onNavigate={setCurrentView} />;
+      case 'lesson-plans': return <MetrarView user={currentUser} />; 
+      case 'videos': return <VideosView />;
+      case 'activity-generator': return <ActivityGeneratorView />;
+      case 'admin': return <AdminView />;
+      case 'community': return <CommunityView />;
+      default: return <Dashboard user={currentUser} onNavigate={setCurrentView} />;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="animate-spin text-cyan-600" size={40} />
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return <AuthForm />;
-  }
+  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-cyan-600" size={40} /></div>;
+  if (!currentUser) return <AuthForm />;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#020410] transition-colors duration-300 font-sans text-slate-900 dark:text-white">
-      <Sidebar 
-        isOpen={isSidebarOpen}
-        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        isDarkMode={isDarkMode}
-        toggleTheme={toggleTheme}
-        user={currentUser}
-        onLogout={signOut}
-      />
-      
-      <main 
-        className={`
-          transition-all duration-300 ease-in-out
-          ${isSidebarOpen ? 'ml-64' : 'ml-20'}
-          p-8 min-h-screen relative
-        `}
-      >
+      <Sidebar isOpen={isSidebarOpen} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} currentView={currentView} setCurrentView={setCurrentView} isDarkMode={isDarkMode} toggleTheme={toggleTheme} user={currentUser} onLogout={signOut} />
+      <main className={`transition-all duration-300 ease-in-out ${isSidebarOpen ? 'ml-64' : 'ml-20'} p-8 min-h-screen relative`}>
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-50 pointer-events-none mix-blend-soft-light dark:opacity-20"></div>
-        <div className="relative z-10">
-            {renderView()}
-        </div>
+        <div className="relative z-10">{renderView()}</div>
       </main>
-
       <AIChatAssistant />
     </div>
   );
