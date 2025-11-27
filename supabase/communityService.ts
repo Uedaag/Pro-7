@@ -7,6 +7,7 @@ export interface CommunityMessage {
   user_name: string;
   user_avatar?: string;
   message: string;
+  image_url?: string; // New field
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +24,7 @@ export async function addCommunityMessage(data: {
   user_name: string;
   user_avatar?: string;
   message: string;
+  image_url?: string; // New field
 }) {
   return supabase
     .from('community_messages')
