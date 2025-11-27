@@ -171,6 +171,27 @@ export interface ClassRoom {
   generatedActivities: GeneratedActivity[];
 }
 
+// --- GRADES & STUDENTS ---
+export interface Student {
+  id: string;
+  classId: string;
+  name: string;
+}
+
+export interface Assessment {
+  id: string;
+  classId: string;
+  title: string;
+  weight?: number;
+}
+
+export interface Grade {
+  id: string;
+  studentId: string;
+  assessmentId: string;
+  score: number;
+}
+
 // --- COMUNIDADE ---
 export interface Post {
   id: string;
@@ -201,16 +222,25 @@ export interface DataContextType {
   addPlan: (plan: BimesterPlan) => Promise<void>;
   updatePlan: (plan: BimesterPlan) => Promise<void>;
   deletePlan: (id: string) => Promise<void>;
+  linkPlanToClass: (planId: string, classId: string) => Promise<void>;
 
   classes: ClassRoom[];
   addClass: (classRoom: ClassRoom) => Promise<void>;
   updateClass: (classRoom: ClassRoom) => Promise<void>;
   deleteClass: (id: string) => Promise<void>;
 
+  // Grades Management
+  fetchClassGradesData: (classId: string) => Promise<{ students: Student[], assessments: Assessment[], grades: Grade[] }>;
+  addStudent: (student: Omit<Student, 'id'>) => Promise<Student | null>;
+  deleteStudent: (id: string) => Promise<void>;
+  addAssessment: (assessment: Omit<Assessment, 'id'>) => Promise<Assessment | null>;
+  deleteAssessment: (id: string) => Promise<void>;
+  saveGrade: (grade: { studentId: string, assessmentId: string, score: number }) => Promise<void>;
+
   // Admin & Users
   users: User[];
-  updateUser: (user: User) => Promise<void>; // Atualização individual direta
-  updateUsersBatch: (users: User[]) => Promise<void>; // Atualização em lote
+  updateUser: (user: User) => Promise<void>; 
+  updateUsersBatch: (users: User[]) => Promise<void>; 
   deleteUser: (id: string) => Promise<void>;
   
   // Settings
@@ -222,4 +252,8 @@ export interface DataContextType {
   addPost: (content: string, user: User) => Promise<void>;
   deletePost: (id: string) => Promise<void>;
   likePost: (id: string) => Promise<void>;
+
+  // Activities
+  addActivity: (activity: GeneratedActivity) => Promise<void>;
+  refreshData: () => Promise<void>;
 }

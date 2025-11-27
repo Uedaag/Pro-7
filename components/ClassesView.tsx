@@ -1,12 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Plus, Trash2, ChevronLeft, Calendar as CalendarIcon,
   X, Eye, Printer, Presentation, ChevronRight, Image as ImageIcon, 
-  BookOpen, FileText, Loader2, Clock, Edit3, Save, CheckCircle
+  BookOpen, FileText, Loader2, Clock, Edit3, Save, CheckCircle, GraduationCap, Download
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
-import { ClassRoom, View, GeneratedActivity, BimesterPlan, LessonRow } from '../types';
+import { ClassRoom, View, GeneratedActivity, BimesterPlan, LessonRow, Student, Assessment, Grade } from '../types';
 import { generatePPTX } from '../services/pptService';
 
 export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: any }> = ({ onNavigate, user }) => {
@@ -95,7 +95,194 @@ export const ClassesView: React.FC<{ onNavigate?: (view: View) => void; user: an
   );
 };
 
-// --- SUB-COMPONENTE: VISUALIZAR E EDITAR PLANO ---
+// --- SUB-COMPONENTE: TABELA DE NOTAS ---
+const GradesTab: React.FC<{ classId: string }> = ({ classId }) => {
+  const { fetchClassGradesData, addStudent, deleteStudent, addAssessment, deleteAssessment, saveGrade } = useData();
+  
+  const [students, setStudents] = useState<Student[]>([]);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  
+  const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+  const [newStudentName, setNewStudentName] = useState('');
+  
+  const [isAddAssessmentOpen, setIsAddAssessmentOpen] = useState(false);
+  const [newAssessmentTitle, setNewAssessmentTitle] = useState('');
+
+  // Carrega dados
+  useEffect(() => {
+    loadData();
+  }, [classId]);
+
+  const loadData = async () => {
+    const data = await fetchClassGradesData(classId);
+    setStudents(data.students);
+    setAssessments(data.assessments);
+    setGrades(data.grades);
+  };
+
+  const handleAddStudent = async () => {
+    if (!newStudentName.trim()) return;
+    const s = await addStudent({ classId, name: newStudentName });
+    if (s) {
+      setStudents([...students, s]);
+      setNewStudentName('');
+      setIsAddStudentOpen(false);
+    }
+  };
+
+  const handleDeleteStudent = async (id: string) => {
+    if (confirm("Excluir aluno?")) {
+      await deleteStudent(id);
+      setStudents(students.filter(s => s.id !== id));
+    }
+  };
+
+  const handleAddAssessment = async () => {
+    if (!newAssessmentTitle.trim()) return;
+    const a = await addAssessment({ classId, title: newAssessmentTitle });
+    if (a) {
+      setAssessments([...assessments, a]);
+      setNewAssessmentTitle('');
+      setIsAddAssessmentOpen(false);
+    }
+  };
+
+  const handleDeleteAssessment = async (id: string) => {
+    if (confirm("Excluir coluna de avaliação?")) {
+      await deleteAssessment(id);
+      setAssessments(assessments.filter(a => a.id !== id));
+    }
+  };
+
+  const handleGradeChange = async (studentId: string, assessmentId: string, value: string) => {
+    const score = parseFloat(value);
+    if (isNaN(score)) return;
+
+    // Atualiza visualmente (otimista)
+    const existingGrade = grades.find(g => g.studentId === studentId && g.assessmentId === assessmentId);
+    if (existingGrade) {
+      setGrades(grades.map(g => g.id === existingGrade.id ? { ...g, score } : g));
+    } else {
+      setGrades([...grades, { id: 'temp', studentId, assessmentId, score }]);
+    }
+
+    // Salva no banco (debounce seria ideal, mas direto por simplicidade)
+    await saveGrade({ studentId, assessmentId, score });
+  };
+
+  const getScore = (studentId: string, assessmentId: string) => {
+    const g = grades.find(g => g.studentId === studentId && g.assessmentId === assessmentId);
+    return g ? g.score : '';
+  };
+
+  const downloadExcel = () => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    // Header
+    const header = ["Aluno", ...assessments.map(a => a.title)];
+    csvContent += header.join(",") + "\r\n";
+
+    // Rows
+    students.forEach(s => {
+      const row = [s.name];
+      assessments.forEach(a => {
+        row.push(getScore(s.id, a.id).toString());
+      });
+      csvContent += row.join(",") + "\r\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "notas_turma.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
+        <h3 className="font-bold text-slate-700">Diário de Notas</h3>
+        <div className="flex gap-2">
+          <button onClick={() => setIsAddStudentOpen(true)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-sm rounded-lg hover:bg-slate-50">+ Aluno</button>
+          <button onClick={() => setIsAddAssessmentOpen(true)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-sm rounded-lg hover:bg-slate-50">+ Coluna</button>
+          <button onClick={downloadExcel} className="px-4 py-2 bg-emerald-600 text-white font-bold text-sm rounded-lg flex items-center gap-2 hover:bg-emerald-500"><Download size={16}/> Baixar Excel</button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-sm bg-white">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold">
+            <tr>
+              <th className="px-6 py-4 min-w-[200px]">Nome do Aluno</th>
+              {assessments.map(a => (
+                <th key={a.id} className="px-4 py-4 min-w-[100px] text-center group relative">
+                  {a.title}
+                  <button onClick={() => handleDeleteAssessment(a.id)} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1"><X size={12}/></button>
+                </th>
+              ))}
+              <th className="px-4 py-4 min-w-[50px]"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {students.map(s => (
+              <tr key={s.id} className="hover:bg-slate-50">
+                <td className="px-6 py-3 font-medium text-slate-800">{s.name}</td>
+                {assessments.map(a => (
+                  <td key={a.id} className="px-4 py-3 text-center">
+                    <input 
+                      type="number" 
+                      className="w-16 p-1 text-center border rounded bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                      value={getScore(s.id, a.id)}
+                      onChange={(e) => handleGradeChange(s.id, a.id, e.target.value)}
+                    />
+                  </td>
+                ))}
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => handleDeleteStudent(s.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
+                </td>
+              </tr>
+            ))}
+            {students.length === 0 && (
+              <tr><td colSpan={assessments.length + 2} className="text-center py-8 text-slate-400">Nenhum aluno cadastrado. Adicione alunos para começar.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL ADD STUDENT */}
+      {isAddStudentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl w-80 shadow-2xl">
+            <h4 className="font-bold text-lg mb-4">Adicionar Aluno</h4>
+            <input autoFocus value={newStudentName} onChange={e => setNewStudentName(e.target.value)} className="w-full p-2 border rounded mb-4" placeholder="Nome do Aluno" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setIsAddStudentOpen(false)} className="px-3 py-1 text-slate-500 font-bold text-sm">Cancelar</button>
+              <button onClick={handleAddStudent} className="px-4 py-2 bg-purple-600 text-white rounded font-bold text-sm">Adicionar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADD ASSESSMENT */}
+      {isAddAssessmentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl w-80 shadow-2xl">
+            <h4 className="font-bold text-lg mb-4">Nova Coluna de Nota</h4>
+            <input autoFocus value={newAssessmentTitle} onChange={e => setNewAssessmentTitle(e.target.value)} className="w-full p-2 border rounded mb-4" placeholder="Ex: Prova 1, Trabalho..." />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setIsAddAssessmentOpen(false)} className="px-3 py-1 text-slate-500 font-bold text-sm">Cancelar</button>
+              <button onClick={handleAddAssessment} className="px-4 py-2 bg-purple-600 text-white rounded font-bold text-sm">Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- SUB-COMPONENTE: VISUALIZAR E EDITAR PLANO (MANTIDO) ---
 const PlanManagerModal: React.FC<{ plan: BimesterPlan; onClose: () => void; }> = ({ plan, onClose }) => {
   const { updatePlan } = useData();
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
@@ -304,9 +491,9 @@ const PlanManagerModal: React.FC<{ plan: BimesterPlan; onClose: () => void; }> =
 
 const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNavigate?: (view: View) => void }> = ({ classRoom, onBack, onNavigate }) => {
   const { events, plans } = useData();
-  const [activeTab, setActiveTab] = useState<'aulas' | 'planos' | 'atividades'>('aulas');
+  const [activeTab, setActiveTab] = useState<'aulas' | 'planos' | 'atividades' | 'notas'>('aulas');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
-  const [editingPlan, setEditingPlan] = useState<BimesterPlan | null>(null); // Estado para abrir o modal de edição
+  const [editingPlan, setEditingPlan] = useState<BimesterPlan | null>(null);
 
   const classEvents = events
     .filter(evt => evt.classId === classRoom.id)
@@ -327,7 +514,12 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px]">
          <div className="flex border-b border-slate-200 overflow-x-auto">
-            {[{ id: 'aulas', label: 'Aulas', icon: CalendarIcon }, { id: 'planos', label: 'Planos', icon: BookOpen }, { id: 'atividades', label: 'Atividades (IA)', icon: FileText }].map(tab => (
+            {[
+              { id: 'aulas', label: 'Aulas', icon: CalendarIcon }, 
+              { id: 'planos', label: 'Planos', icon: BookOpen }, 
+              { id: 'atividades', label: 'Atividades (IA)', icon: FileText },
+              { id: 'notas', label: 'Notas', icon: GraduationCap }
+            ].map(tab => (
                <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-6 py-4 font-bold text-sm ${activeTab === tab.id ? 'border-b-2 border-purple-600 text-purple-700 bg-purple-50' : 'text-slate-500'}`}><tab.icon size={18} /> {tab.label}</button>
             ))}
          </div>
@@ -428,6 +620,10 @@ const ClassDetailView: React.FC<{ classRoom: ClassRoom; onBack: () => void; onNa
                         </div>
                     )}
                 </div>
+            )}
+
+            {activeTab === 'notas' && (
+              <GradesTab classId={classRoom.id} />
             )}
          </div>
       </div>

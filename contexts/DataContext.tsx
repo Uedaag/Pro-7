@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   CalendarEvent,
@@ -7,7 +8,10 @@ import {
   User,
   Post,
   GeneratedActivity,
-  SystemSettings
+  SystemSettings,
+  Student,
+  Assessment,
+  Grade
 } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
@@ -223,6 +227,79 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshData = async () => { if (currentUser) await fetchAllData(currentUser.id); };
 
+  // --- GRADES MANAGEMENT (NOVO) ---
+  
+  const fetchClassGradesData = async (classId: string) => {
+    try {
+        const [studentsRes, assessmentsRes, gradesRes] = await Promise.all([
+            supabase.from('students').select('*').eq('class_id', classId),
+            supabase.from('assessments').select('*').eq('class_id', classId),
+            // Para grades, idealmente filtramos por alunos, mas podemos filtrar no front se necessário ou usar join
+            // Aqui pegamos todas as notas de alunos desta turma
+            supabase.from('grades').select('*, students!inner(class_id)').eq('students.class_id', classId) 
+        ]);
+
+        const students = (studentsRes.data || []).map((s: any) => ({
+            id: s.id, classId: s.class_id, name: s.name
+        }));
+
+        const assessments = (assessmentsRes.data || []).map((a: any) => ({
+            id: a.id, classId: a.class_id, title: a.title, weight: a.weight
+        }));
+
+        const grades = (gradesRes.data || []).map((g: any) => ({
+            id: g.id, studentId: g.student_id, assessmentId: g.assessment_id, score: g.score
+        }));
+
+        return { students, assessments, grades };
+    } catch (error) {
+        console.error("Erro ao buscar notas:", error);
+        return { students: [], assessments: [], grades: [] };
+    }
+  };
+
+  const addStudent = async (student: Omit<Student, 'id'>) => {
+      const { data, error } = await supabase.from('students').insert([{
+          class_id: student.classId,
+          name: student.name
+      }]).select().single();
+      
+      if (error) { console.error(error); return null; }
+      return { id: data.id, classId: data.class_id, name: data.name };
+  };
+
+  const deleteStudent = async (id: string) => {
+      await supabase.from('students').delete().eq('id', id);
+  };
+
+  const addAssessment = async (assessment: Omit<Assessment, 'id'>) => {
+      const { data, error } = await supabase.from('assessments').insert([{
+          class_id: assessment.classId,
+          title: assessment.title,
+          weight: assessment.weight
+      }]).select().single();
+
+      if (error) { console.error(error); return null; }
+      return { id: data.id, classId: data.class_id, title: data.title, weight: data.weight };
+  };
+
+  const deleteAssessment = async (id: string) => {
+      await supabase.from('assessments').delete().eq('id', id);
+  };
+
+  const saveGrade = async (grade: { studentId: string, assessmentId: string, score: number }) => {
+      // Upsert: atualiza se existe, cria se não existe
+      const { error } = await supabase.from('grades').upsert({
+          student_id: grade.studentId,
+          assessment_id: grade.assessmentId,
+          score: grade.score
+      }, { onConflict: 'student_id, assessment_id' }); // Requer CONSTRAINT UNIQUE no banco
+      
+      if (error) console.error("Erro ao salvar nota:", error);
+  };
+
+
+  // --- AUTH ACTIONS ---
   const signIn = async (email: string, pass: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     return { error };
@@ -244,62 +321,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsers([]);
       setPosts([]);
       currentUserIdRef.current = null;
-      try { await supabase.auth.signOut(); } catch (error) {}
+      supabase.auth.signOut().catch(console.error);
   };
 
   // --- CRUD ACTIONS ---
-  
-  // FIX: Mapping explicit columns for Classes (camelCase -> snake_case)
   const addClass = async (c: any) => {
-    const payload = {
-        user_id: currentUser?.id,
-        name: c.name,
-        grade: c.grade,
-        subject: c.subject,
-        shift: c.shift,
-        students_count: c.studentsCount || 0
-    };
-
-    const { data, error } = await supabase
-        .from('classes')
-        .insert([payload])
-        .select()
-        .single();
-
-    if(error) {
-        console.error("Erro Supabase addClass:", error);
-        throw new Error(error.message);
-    }
-    
-    if(data) {
-        const newClass = {
-            id: data.id, 
-            userId: data.user_id, 
-            name: data.name, 
-            grade: data.grade, 
-            subject: data.subject, 
-            shift: data.shift, 
-            studentsCount: data.students_count,
-            linkedPlanIds: data.linked_plan_ids || [], 
-            generatedActivities: []
-        };
-        setClasses(prev=>[...prev, newClass]);
-    }
+    const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id}]).select().single();
+    if(error) throw new Error(error.message);
+    if(data) setClasses(prev=>[...prev, {...c, id: data.id}]);
   };
-
-  const updateClass = async (c: any) => {
-      const payload = {
-        name: c.name,
-        grade: c.grade,
-        subject: c.subject,
-        shift: c.shift,
-        students_count: c.studentsCount
-      };
-
-      const { error } = await supabase.from('classes').update(payload).eq('id', c.id);
-      if(!error) setClasses(prev => prev.map(cls => cls.id === c.id ? c : cls));
-  };
-
+  const updateClass = async (c: any) => {};
   const deleteClass = async (id: string) => {
     await supabase.from('classes').delete().eq('id', id);
     setClasses(prev=>prev.filter(c=>c.id!==id));
@@ -357,22 +388,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const linkPlanToClass = async (planId: string, classId: string) => {
       const targetClass = classes.find(c => c.id === classId);
       if (!targetClass) throw new Error("Turma não encontrada.");
-
       const currentLinks = targetClass.linkedPlanIds || [];
-      if (currentLinks.includes(planId)) return; // Já vinculado
-
+      if (currentLinks.includes(planId)) return;
       const newLinks = [...currentLinks, planId];
-
-      const { error } = await supabase
-        .from('classes')
-        .update({ linked_plan_ids: newLinks })
-        .eq('id', classId);
-
+      const { error } = await supabase.from('classes').update({ linked_plan_ids: newLinks }).eq('id', classId);
       if (error) throw new Error(error.message);
-
-      setClasses(prev => prev.map(c => 
-          c.id === classId ? { ...c, linkedPlanIds: newLinks } : c
-      ));
+      setClasses(prev => prev.map(c => c.id === classId ? { ...c, linkedPlanIds: newLinks } : c));
   };
 
   const addPost = async (c: string, u: User) => {
@@ -441,7 +462,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       users, updateUser, updateUsersBatch, deleteUser,
       systemSettings, saveSystemSettings,
       posts, addPost, deletePost, likePost,
-      addActivity, refreshData
+      addActivity, refreshData,
+      fetchClassGradesData, addStudent, deleteStudent, addAssessment, deleteAssessment, saveGrade
     }}>
       {children}
     </DataContext.Provider>
