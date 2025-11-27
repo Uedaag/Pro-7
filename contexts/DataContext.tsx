@@ -14,7 +14,7 @@ import type { Session } from '@supabase/supabase-js';
 
 interface ExtendedDataContextType extends DataContextType {
   addActivity: (activity: GeneratedActivity) => Promise<void>;
-  linkPlanToClass: (planId: string, classId: string) => Promise<void>; // Nova função
+  linkPlanToClass: (planId: string, classId: string) => Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -247,6 +247,83 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try { await supabase.auth.signOut(); } catch (error) {}
   };
 
+  // --- CRUD ACTIONS ---
+  
+  // FIX: Mapping explicit columns for Classes (camelCase -> snake_case)
+  const addClass = async (c: any) => {
+    const payload = {
+        user_id: currentUser?.id,
+        name: c.name,
+        grade: c.grade,
+        subject: c.subject,
+        shift: c.shift,
+        students_count: c.studentsCount || 0
+    };
+
+    const { data, error } = await supabase
+        .from('classes')
+        .insert([payload])
+        .select()
+        .single();
+
+    if(error) {
+        console.error("Erro Supabase addClass:", error);
+        throw new Error(error.message);
+    }
+    
+    if(data) {
+        const newClass = {
+            id: data.id, 
+            userId: data.user_id, 
+            name: data.name, 
+            grade: data.grade, 
+            subject: data.subject, 
+            shift: data.shift, 
+            studentsCount: data.students_count,
+            linkedPlanIds: data.linked_plan_ids || [], 
+            generatedActivities: []
+        };
+        setClasses(prev=>[...prev, newClass]);
+    }
+  };
+
+  const updateClass = async (c: any) => {
+      const payload = {
+        name: c.name,
+        grade: c.grade,
+        subject: c.subject,
+        shift: c.shift,
+        students_count: c.studentsCount
+      };
+
+      const { error } = await supabase.from('classes').update(payload).eq('id', c.id);
+      if(!error) setClasses(prev => prev.map(cls => cls.id === c.id ? c : cls));
+  };
+
+  const deleteClass = async (id: string) => {
+    await supabase.from('classes').delete().eq('id', id);
+    setClasses(prev=>prev.filter(c=>c.id!==id));
+  };
+
+  const addEvent = async (e: any) => {
+    const { data, error } = await supabase.from('events').insert([{...e, user_id: currentUser?.id}]).select().single();
+    if(error) throw new Error(error.message);
+    if(data) setEvents(prev=>[...prev, {...e, id: data.id}]);
+  };
+  const addEvents = async (es: any[]) => {
+      const { data, error } = await supabase.from('events').insert(es.map(e => ({...e, user_id: currentUser?.id}))).select();
+      if(error) throw new Error(error.message);
+      if(data) setEvents(prev => [...prev, ...data.map((d: any) => ({...d, id: d.id, userId: d.user_id}))]);
+  }; 
+  const updateEvent = async (e: any) => {
+    const { error } = await supabase.from('events').update(e).eq('id', e.id);
+    if(!error) setEvents(prev=>prev.map(ev=>ev.id===e.id?e:ev));
+  };
+  const deleteEvent = async (id: string) => {
+    await supabase.from('events').delete().eq('id', id);
+    setEvents(prev=>prev.filter(e=>e.id!==id));
+  };
+
   const addPlan = async (plan: BimesterPlan) => {
     const { data: { user } } = await supabase.auth.getUser();
     const user_id = user?.id || currentUser?.id;
@@ -267,12 +344,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data) setPlans(prev => [...prev, { ...plan, id: data.id, userId: user_id, createdAt: data.created_at }]);
   };
 
+  const updatePlan = async (p: BimesterPlan) => {
+      const { error } = await supabase.from('plans').update({ lessons: p.lessons }).eq('id', p.id);
+      if(!error) setPlans(prev => prev.map(plan => plan.id === p.id ? p : plan));
+  };
+  
   const deletePlan = async (id: string) => {
     await supabase.from('plans').delete().eq('id', id);
     setPlans(prev=>prev.filter(p=>p.id!==id));
   };
 
-  // --- NOVA FUNÇÃO DE VINCULAR PLANO ---
   const linkPlanToClass = async (planId: string, classId: string) => {
       const targetClass = classes.find(c => c.id === classId);
       if (!targetClass) throw new Error("Turma não encontrada.");
@@ -293,34 +374,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           c.id === classId ? { ...c, linkedPlanIds: newLinks } : c
       ));
   };
-
-  const addClass = async (c: any) => {
-    const { data, error } = await supabase.from('classes').insert([{...c, user_id: currentUser?.id}]).select().single();
-    if(error) throw new Error(error.message);
-    if(data) setClasses(prev=>[...prev, {...c, id: data.id}]);
-  };
-  const updateClass = async (c: any) => {};
-  const deleteClass = async (id: string) => {
-    await supabase.from('classes').delete().eq('id', id);
-    setClasses(prev=>prev.filter(c=>c.id!==id));
-  };
-
-  const addEvent = async (e: any) => {
-    const { data, error } = await supabase.from('events').insert([{...e, user_id: currentUser?.id}]).select().single();
-    if(error) throw new Error(error.message);
-    if(data) setEvents(prev=>[...prev, {...e, id: data.id}]);
-  };
-  const addEvents = async (es: any[]) => {}; 
-  const updateEvent = async (e: any) => {
-    const { error } = await supabase.from('events').update(e).eq('id', e.id);
-    if(!error) setEvents(prev=>prev.map(ev=>ev.id===e.id?e:ev));
-  };
-  const deleteEvent = async (id: string) => {
-    await supabase.from('events').delete().eq('id', id);
-    setEvents(prev=>prev.filter(e=>e.id!==id));
-  };
-
-  const updatePlan = async (p: any) => {};
 
   const addPost = async (c: string, u: User) => {
     const { data, error } = await supabase.from('community').insert([{user_id: u.id, user_name: u.name, content: c}]).select().single();
@@ -347,7 +400,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: act.title,
         content: act.content
     }]).select().single();
+
     if (error) throw new Error(error.message);
+    
     if (data) {
         const newAct = { ...act, id: data.id, createdAt: data.created_at };
         setClasses(prev => prev.map(c => c.id === act.classId ? {...c, generatedActivities: [...c.generatedActivities, newAct]} : c));
