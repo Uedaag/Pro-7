@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Filter, 
-  MoreVertical, X, Trash2, Save, Repeat, Clock, CheckCircle, List, Grid, Users
+  MoreVertical, X, Trash2, Save, Repeat, Clock, CheckCircle, List, Grid, Users, AlertTriangle
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { CalendarEvent, EventType, User } from '../types';
@@ -47,6 +47,9 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(
     formatDateForInput(new Date(new Date().setMonth(new Date().getMonth() + 1)))
   );
+
+  // Estado para Modal de Exclusão
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const getEventsForDay = (day: number) => {
     return events.filter(evt => {
@@ -139,12 +142,11 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
     setIsModalOpen(false);
   };
 
-  const handleDelete = async () => {
+  const handleConfirmDelete = async () => {
     if (editingEvent) {
-      if(window.confirm("Deseja excluir este evento?")) {
-        await deleteEvent(editingEvent.id);
-        setIsModalOpen(false);
-      }
+      await deleteEvent(editingEvent.id);
+      setIsDeleteModalOpen(false);
+      setIsModalOpen(false);
     }
   };
 
@@ -461,7 +463,7 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
                     {editingEvent && (
                       <button 
                         type="button" 
-                        onClick={handleDelete} 
+                        onClick={() => setIsDeleteModalOpen(true)} 
                         className="px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-bold flex items-center gap-2 transition-colors"
                       >
                         <Trash2 size={18}/> Excluir
@@ -475,6 +477,35 @@ export const AgendaView: React.FC<{ user: User }> = ({ user }) => {
                     </button>
                 </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* NOVO MODAL DE EXCLUSÃO ESTILIZADO */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#0f172a] w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center animate-scale-in border border-slate-200 dark:border-white/10">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 dark:text-red-500">
+              <AlertTriangle size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Excluir Evento?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+              Tem certeza que deseja remover este conteúdo da sua agenda? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button 
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-lg shadow-red-500/20 transition-transform hover:-translate-y-0.5"
+              >
+                Sim, Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}
